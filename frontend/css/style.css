@@ -1,0 +1,119 @@
+@import url("https://fonts.googleapis.com/css2?family=Golos+Text&family=Lato&family=Oswald&display=swap");
+body {
+  height: 100%;
+  text-align: center;
+  width: 100%;
+  background-color: #1b6bdba6;
+  overflow-x: hidden;
+  max-width: 100vw;
+  margin: 0;
+}
+
+p {
+  font-family: "Golos Text", sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Lato", sans-serif;
+}
+
+.controls {
+  position: sticky;
+  position: -webkit-sticky;
+  top: 0;
+  background-color: #28666e;
+  width: 100vw;
+  margin-bottom: 2rem;
+}
+
+.packetTable tbody tr:nth-child(even) {
+  background-color: #104691a6;
+}
+
+.packetTable tbody td {
+  border: 1px solid #dddddd;
+  font-size: 1.5rem;
+}
+
+.packetTable tbody tr:hover {
+  background-color: #e2e2e2;
+}
+
+.packetTable {
+  width: 80%;
+  margin: auto;
+  font-size: 2rem;
+}
+
+/* Style for selected options */
+select option:checked {
+  background-color: lightblue;
+  color: white;
+}
+
+/* Style for unselected options */
+select option:not(:checked) {
+  background-color: white;
+  color: black;
+}
+
+.customizations {
+  position: absolute;
+  top: 0;
+  left: 0.3rem;
+}
+
+.timeMethod {
+  position: absolute;
+  top: 3rem;
+  left: 0.5rem;
+}
+
+#status {
+  color: rgb(34, 169, 119);
+}
+
+#tableView {
+  position: absolute;
+  top: -0;
+  right: 1rem;
+  /* top: 0.5rem; */
+}
+
+#popupContainer {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  z-index: 9999;
+  visibility:hidden;
+  /* z-index: -1; */
+}
+
+#popupBox {
+  position: relative;
+  width: 100%;
+  max-height: 300px; /* Set a maximum height for the popup box */
+  background-color: #f2f2f2;
+  border: 1px solid #ccc;
+  border-top: none;
+  overflow-y: auto; /* Add vertical scrollbar when content overflows */
+}
+
+#popupContent {
+  padding: 10px;
+  overflow: auto; /* Enable content scrolling inside the popup box */
+}
+
+
+#dragHandle {
+  height: 10px;
+  cursor: ns-resize;
+  background-color: #ccc;
+}
+
+#popupContent {
+  padding: 10px;
+}

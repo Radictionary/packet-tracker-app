@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interface Change</title>
+</head>
+
+<body style="background-color: rgba(255, 255, 255, 0.5);">
+    <h1>Loading...</h1>
+    <h2>Status: <span id="statusMessage"></span></h2>
+</body>
+<script>
+    const statusMessage = document.getElementById("statusMessage")
+    const es = new EventSource('/interfacechange');
+    es.addEventListener("error", event => {
+        statusMessage.innerText = "Stopped on ERROR. The server is probably unresponsive";
+    });
+    es.addEventListener('ready-update', function (event) {
+        const data = JSON.parse(event.data);
+        if (data.data === "true") {
+            setTimeout(() => {location.replace("/")})
+            statusMessage.innerText = "Redirecting you!"
+        }
+    });
+
+    window.onload = function () {
+        setTimeout(function () {
+            location.replace("/") //redirect anyways
+            statusMessage.innerText = "Redirecting without signal"
+        }, 3000);
+    };
+
+</script>
+
+</html>

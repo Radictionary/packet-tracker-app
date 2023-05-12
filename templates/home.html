@@ -1,0 +1,77 @@
+{{template "base" .}}
+{{define "description"}}
+<meta name="description" content="My wireshark clone">
+{{end}}
+
+{{define "content_box"}}
+</div>
+<section class="controls">
+  <form method="POST" action="/interface" id="controls">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <label>Interface:</label>
+    <input id="interfaceInput" name="interface" type="text" value="" />
+    <select name="filter" id="protocols" multiple>
+      <option value="none">none</option>
+      <option value="tcp">tcp</option>
+      <option value="udp">udp</option>
+      <option value="arp">arp</option>
+      <option value="dns">dns</option>
+    </select>
+    <div class="timeMethod">
+      <label for="time_method">Use packet captured time</label>
+      <input type="checkbox" name="time_method" />
+    </div>
+    <input type="submit" value="apply" />
+  </form>
+  <button id="start">start</button>
+  <button id="stop">stop</button>
+  <button id="clear">clear</button>
+  <h3>Status: <span id="status">Waiting for start</span></h3>
+  <h3 class="customizations">Customization: <span id="customization"></span></h3>
+  <h3 id="tableView"></h3>
+</section>
+
+<table id="packetTable" class="packetTable">
+  <thead>
+    <tr>
+      <th>Interface</th>
+      <th>Protocol</th>
+      <th>Source</th>
+      <th>Destination</th>
+      <th>Packet</th>
+      <th>Time</th>
+    </tr>
+  </thead>
+  <tbody id="table-body">
+  </tbody>
+</table>
+
+<!-- <div id="popupContainer">
+  <div id="popupBox">
+    <div class="popup-handle"></div>
+    <h2>Packet Dump #<span id="packetNumber"></span></h2>
+    <h4 id="packetDumpOutput"></h4>
+    <button id="closeButton">Close</button>
+  </div>
+</div> -->
+
+<div id="popupContainer">
+  <div id="popupBox">
+    <div id="dragHandle"></div>
+    <div id="popupContent">
+      <h2>Packet Dump #<span id="packetNumber"></span></h2>
+      <h4 id="packetDumpOutput"></h4>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+{{end}}
+
+{{define "js"}}
+<script src="/frontend/js/app.js"></script>
+{{end}}
