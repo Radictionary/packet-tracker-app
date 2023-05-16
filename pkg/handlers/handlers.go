@@ -39,7 +39,6 @@ type PacketRetrieval struct {
 	PacketDump   string `json:"packetDump"`
 }
 
-// var messageChan chan map[string]any
 var (
 	messageChan chan PacketStruct
 	readyChan   chan string
@@ -54,7 +53,6 @@ var (
 )
 
 func init() {
-	// messageChan = make(chan map[string]any)
 	messageChan = make(chan PacketStruct)
 	readyChan = make(chan string)
 	stop = make(chan struct{})
@@ -91,6 +89,7 @@ func NewHandlers(r *Repository) {
 	Repo = r
 }
 
+// detectProtocol detects the protocol and returns what it is
 func detectProtocol(packet gopacket.Packet) (string, error) {
 	var protocol string
 	var err error
@@ -128,6 +127,7 @@ func detectProtocol(packet gopacket.Packet) (string, error) {
 	return protocol, err
 }
 
+// listenPackets function listens for packets in the background and sends packets to the frontend via SSE
 func listenPackets() {
 	fmt.Println("Started the goroutine")
 	listening = true
@@ -144,10 +144,6 @@ func listenPackets() {
 		timeout  = pcap.BlockForever
 		devFound = false
 	)
-	//very first filter and interface settings
-	// if filter == "" {
-	// 	filter = "tcp"
-	// }
 	if iface == "" {
 		embedded_db.UpdateDatabase(db, "iface", "en0")
 		iface = "en0"
@@ -169,10 +165,10 @@ func listenPackets() {
 	handle, err = pcap.OpenLive(iface, snaplen, promisc, timeout)
 	config.Handle(err, "Finding all devices", true)
 
-	defer func() {
-		handle.Close()
-		fmt.Println("Closed the handle")
-	}()
+	// defer func() {
+	// 	handle.Close()
+	// 	fmt.Println("Closed the handle")
+	// }()
 
 	if err := handle.SetBPFFilter(filter); err != nil {
 		fmt.Println("Couldn't filter with current settings. Reseting the filter to be nothing. The filter was: ", filter)
@@ -185,7 +181,6 @@ func listenPackets() {
 		select {
 		case <-stop:
 			fmt.Println("STOPPED THE GOROUTINE")
-			// readyChan <- "ready"
 			stopped <- true
 			listening = false
 			return
@@ -262,10 +257,13 @@ func formatServerSentEvent(event string, data any) (string, error) {
 	return sb.String(), nil
 }
 
+// Sends packets to the frontend
 func (m *Repository) SseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Expires", "0")
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -279,17 +277,18 @@ func (m *Repository) SseHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			panic(err)
 		}
-		event, err := formatServerSentEvent("price-update", string(jsonData))
+		event, err := formatServerSentEvent("new-packet-update", string(jsonData))
 		config.Handle(err, "Error formatting server sent event", true)
 
 		_, err = fmt.Fprint(w, event)
-		config.Handle(err, "Error sending to client", true)
+		config.Handle(err, "Error sending to client", false)
 
 		flusher.Flush()
 		fmt.Printf("Flushed the data\n")
 	}
 }
 
+// ReadySSE function takes care of changes to settings, and notifies frontend when program is ready via SSE
 func (m *Repository) ReadySSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -310,6 +309,7 @@ func (m *Repository) ReadySSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// InterfaceChange takes care of any changes to how to listen for packets
 func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Recieved the POST request to change the interface")
 	if r.URL.Path != "/interface" {
@@ -323,9 +323,17 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		newiface := r.FormValue("interface")
-		newfilter := r.FormValue("filter")
+		newfilter := r.Form["filter"]
+		var newfilterstring string
+		fmt.Println("THE NEW FILTER IS:", newfilter)
+		for i, filter := range newfilter {
+			if i != 0 {
+				newfilterstring += " or "
+			}
+			newfilterstring += filter
+		}
+		fmt.Println(newfilterstring)
 		newTimeMethod := r.FormValue("time_method")
-
 		body, err := io.ReadAll(r.Body)
 		config.Handle(err, "Reading the body for new interface", false)
 
@@ -340,28 +348,33 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 			return
 		} else if strings.Contains(string(body), "start") {
 			fmt.Println("GOT REQUEST TO START")
-			for i := 1; i <= 10; i++ {
-				packetInfo.Protocol = "SSE_CLEAN"
-				packetInfo.Interface = "SSE_CLEAN"
-				fmt.Println("SENT SSE_CLEAN NUMBER: ", i)
-				if i == 10 {
-					packetInfo.SrcAddr = "done"
-				}
-				messageChan <- packetInfo
+			if listening {
+				handle.Close()
+				fmt.Println("Closed the handle before starting")
 			}
-			fmt.Println("FINISHED CLEANING SSE")
+			SSEClean()
+			// for i := 1; i <= 10; i++ {
+			// 	packetInfo.Protocol = "SSE_CLEAN"
+			// 	packetInfo.Interface = "SSE_CLEAN"
+			// 	fmt.Println("SENT SSE_CLEAN NUMBER: ", i)
+			// 	if i == 10 {
+			// 		packetInfo.SrcAddr = "done"
+			// 	}
+			// 	messageChan <- packetInfo
+			// }
+			// fmt.Println("FINISHED CLEANING SSE")
+
+			//SSEClean()
 			go listenPackets()
 		} else {
 			go func() {
 				fmt.Println("Sending stop signal")
-
 				switch listening {
 				case true:
-					//stop <- struct{}{}
 					handle.Close() //close handle just in case
 					fmt.Println("Stopped successfully")
 					embedded_db.UpdateDatabase(db, "iface", newiface)
-					embedded_db.UpdateDatabase(db, "filter", newfilter)
+					embedded_db.UpdateDatabase(db, "filter", newfilterstring)
 					if newTimeMethod == "on" {
 						embedded_db.UpdateDatabase(db, "time_method", "packet_timestamp")
 					} else {
@@ -369,25 +382,17 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 					}
 					fmt.Println("Updated the embedded db")
 					y = 1
-					for i := 1; i <= 10; i++ {
-						packetInfo.Protocol = "SSE_CLEAN"
-						packetInfo.Interface = "SSE_CLEAN"
-						fmt.Println("SENT SSE_CLEAN NUMBER: ", i)
-						if i == 10 {
-							packetInfo.SrcAddr = "done"
-						}
-						messageChan <- packetInfo
-					}
+					SSEClean()
 					fmt.Println("FINISHED CLEANING SSE")
-					if newfilter == "none" {
-						newfilter = ""
+					if newfilterstring == "none" {
+						newfilterstring = ""
 					}
 					time.Sleep(time.Second)
 					readyChan <- "true"
 				case false:
 					fmt.Println("Goroutine hasn't started")
 					embedded_db.UpdateDatabase(db, "iface", newiface)
-					embedded_db.UpdateDatabase(db, "filter", newfilter)
+					embedded_db.UpdateDatabase(db, "filter", newfilterstring)
 					if newTimeMethod == "on" {
 						embedded_db.UpdateDatabase(db, "time_method", "packet_timestamp")
 					} else {
@@ -398,18 +403,17 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 					y = 1
 					readyChan <- "true"
 				}
-
 			}()
 		}
 	default:
 		fmt.Fprintf(w, "Sorry, only POST methods are supported.")
 		fmt.Println("NOT POST")
 	}
-	render.RenderTemplate(w,"interfacechange.html", &models.TemplateData{})
+	render.RenderTemplate(w, "interfacechange.html", &models.TemplateData{})
 }
 
+// SearchPackets retrieves packetDump about a packet that is stored in embedded database
 func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Recieved request to retrieve information about a packet")
 	packetNumber := r.URL.Query().Get("packetnumber")
 	if packetNumber == "clear" {
 		for _, value := range packetsInDB {

@@ -1,36 +1,15 @@
-// const initialSSEConnection = new EventSource("/event")
-// initialSSEConnection.addEventListener("error", event => {
-//     statusMessage.innerText = "Couldn't make initializing SSE connection";
-// });
-// initialSSEConnection.onopen = function () {
-//     console.log("made the init connection")
-//     setTimeout(() => {
-//         console.log("Waiting 1 seconds")
-//     }, 1000);
-//     initialSSEConnection.close()
-// };
+startSSE()
+const selectElement = document.getElementById("protocols");
 
-//Addresses the finished starting issue. Another way could be to make backend redirect only when that is done...maybe?
-// fetch('/interface', {
-//     method: 'POST',
-//     headers: {
-//         'Content-Type': 'application/json'
-//     },
-//     body: JSON.stringify("start")
-// })
-//     .then(response => {
-//         console.log("Sent init message")
-//     })
-//     .catch(error => {
-//         console.error('Error sending POST request:', error);
-//         statusMessage.innerText = "Failed to send start message"
-//     });
+selectElement.addEventListener("change", function () {
+    const selectedOptions = Array.from(this.selectedOptions).map(option => option.value);
+    console.log(selectedOptions);
+});
+
 let scrollDown = true
 let stopCounter = 0
 let listening = false
 let sse_clean_done = false
-const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
-const csrfToken = csrfTokenInput.value;
 
 //Clear all the packetDumps set before
 let itemsToRemove = localStorage.getItem("setValues")
@@ -90,8 +69,7 @@ controls.addEventListener('submit', function (event) {
         localStorage.removeItem('time_method');
     }
 
-    es.close();
-    //console.log("ES IS NOW CLOSED")
+    //es.close();
     form.submit();
 });
 
@@ -105,8 +83,7 @@ const startButton = document.getElementById('start');
 const clearButton = document.getElementById('clear');
 function stopProgram() {
     listening = false
-    es.close();
-    console.log("ES IS CLOSED")
+    //es.close();
     statusMessage.innerText = "Stopped"
     let data = { key: 'stop' };
     let url = '/interface';
@@ -127,6 +104,8 @@ function stopProgram() {
 }
 stopButton.addEventListener('click', function () {
     stopProgram()
+    //es.close()
+    console.log("Event source is closed")
 });
 startButton.addEventListener('click', function () {
     listening = true
@@ -168,7 +147,6 @@ clearButton.addEventListener("click", function () {
 })
 
 
-const es = new EventSource('/event?csrf_token=' + encodeURIComponent(csrfToken));
 const tableBody = document.getElementById('table-body');
 const maxRows = 2000;
 const minPacketRate = 10; // Minimum packet rate to process
@@ -177,17 +155,20 @@ let lastTime = performance.now();
 let startedInt = 0
 let localStorageKeys = [];
 
+function startSSE() {
+    const es = new EventSource("/event");
+    es.addEventListener("error", event => {
+        statusMessage.innerText = "Stopped on an error";
+    });
+    es.addEventListener('new-packet-update', (event) => {
+        const jsonStr = event.data.replace('data:', '').trim(); // Remove the "data:" prefix and any leading/trailing whitespace
+        const data = JSON.parse(JSON.parse(jsonStr).data); // Parse the JSON string twice to extract the data property]
+        appendingTable(data)
+    })
+}
 
-es.addEventListener("error", event => {
-    statusMessage.innerText = "Stopped on an error";
-});
-es.addEventListener('price-update', (event) => {
-    const jsonStr = event.data.replace('data:', '').trim(); // Remove the "data:" prefix and any leading/trailing whitespace
-    const data = JSON.parse(JSON.parse(jsonStr).data); // Parse the JSON string twice to extract the data property]
-    appendingTable(data)
-})
+
 function appendingTable(data) {
-    console.log(data)
     if (startedInt <= 3) {
         statusMessage.innerText = "Started"
     }
@@ -222,6 +203,7 @@ function appendingTable(data) {
             if (data.srcAddr == "done") {
                 statusMessage.innerText = "Finished setting up"
                 sse_clean_done = true
+                console.log("Finished cleaning the SSE")
             }
             return;
         }
@@ -231,6 +213,7 @@ function appendingTable(data) {
         setTimeout(function () {
             if (!sse_clean_done) {
                 console.log("SSE CLEAN IS NOT DONE BUT PROGRAM STOPPED")
+                startSSE()
                 //es.close()
                 //location.reload()
             }
@@ -296,61 +279,6 @@ function appendingTable(data) {
     startedInt++
 }
 
-// function showDump(data, number) {
-//     const popupBox = document.getElementById('popupBox');
-//     const packetDumpOutput = document.getElementById('packetDumpOutput');
-//     const packetNumber = document.getElementById("packetNumber")
-//     const closeButton = document.getElementById('closeButton');
-
-//     function showPopupBox() {
-//         packetDumpOutput.innerText = data;
-//         packetNumber.innerText = number
-//         popupBox.style.display = 'block';
-//     }
-
-//     function closePopupBox() {
-//         popupBox.style.display = 'none';
-//     }
-
-//     showPopupBox()
-
-//     // Close the popup box when the close button is clicked
-//     closeButton.addEventListener('click', closePopupBox);
-// }
-
-// // Get the popup and the handle
-// const popup = document.querySelector('#popupBox');
-// const handle = popup.querySelector('.popup-handle');
-
-// // Define variables to store the initial position of the handle and the mouse
-// let startY = 0;
-// let initialHeight = 0;
-
-// // Add event listeners for the mouse events
-// handle.addEventListener('mousedown', startDrag);
-// window.addEventListener('mouseup', endDrag);
-
-// // Function to start the drag event
-// function startDrag(e) {
-//     startY = e.clientY;
-//     initialHeight = popup.offsetHeight;
-//     window.addEventListener('mousemove', drag);
-// }
-
-// // Function to end the drag event
-// function endDrag() {
-//     window.removeEventListener('mousemove', drag);
-// }
-
-// // Function to handle the drag event
-// function drag(e) {
-//     const delta = e.clientY - startY;
-//     const newHeight = initialHeight - delta;
-//     popup.style.height = `${newHeight}px`;
-// }
-
-
-// Event listener example
 
 function showPopupBox(number, data) {
     const popupContainer = document.getElementById('popupContainer');

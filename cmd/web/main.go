@@ -13,7 +13,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 )
 
-var portNumber = ":8080"
+var portNumber = ":8081"
 
 var app config.AppConfig
 var session *scs.SessionManager

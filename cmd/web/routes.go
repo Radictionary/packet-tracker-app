@@ -11,9 +11,9 @@ import (
 
 func routes(app *config.AppConfig) http.Handler {
 	mux := chi.NewRouter()
-	if app.InProduction {
-		mux.Use(middleware.Recoverer)
-	}
+	// if app.InProduction {
+	// 	mux.Use(middleware.Recoverer)
+	// }
 	mux.Use(middleware.Heartbeat("/ping"))
 
 	mux.Get("/", handlers.Repo.Home)
