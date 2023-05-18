@@ -15,7 +15,6 @@ import (
 	"github.com/Radictionary/website/pkg/embedded_db"
 	"github.com/Radictionary/website/pkg/models"
 	"github.com/Radictionary/website/pkg/render"
-	"github.com/dgraph-io/badger/v4"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
@@ -30,7 +29,7 @@ type PacketStruct struct {
 	Time           string `json:"time"`
 	Err            string `json:"err"`
 	Customization  string `json:"customization"`
-	ProtocolFilter string `json:protocolFilter`
+	ProtocolFilter string `json:"protocolFilter"`
 	PacketDump     string `json:"packetDump"`
 }
 
@@ -41,26 +40,22 @@ type PacketRetrieval struct {
 
 var (
 	messageChan chan PacketStruct
+	badgerDB *embedded_db.DB
 	readyChan   chan string
 	stop        chan struct{}
-	stopped     chan bool
 	filterErr   bool
 	packetInfo  PacketStruct
-	db          *badger.DB
 	handle      *pcap.Handle
 	packetsInDB []string
 	listening   bool
 )
 
 func init() {
+	listening = false
 	messageChan = make(chan PacketStruct)
 	readyChan = make(chan string)
 	stop = make(chan struct{})
-	stopped = make(chan bool, 100)
-
-	var err error
-	db, err = embedded_db.CallDatabase()
-	config.Handle(err, "opening the embeded database", true)
+	badgerDB, _ = embedded_db.NewDB("/tmp/badgerv4")
 }
 
 type RequestData struct {
@@ -131,9 +126,9 @@ func detectProtocol(packet gopacket.Packet) (string, error) {
 func listenPackets() {
 	fmt.Println("Started the goroutine")
 	listening = true
-	iface, err := embedded_db.SearchDatabase(db, "iface")
+	iface, err := badgerDB.Search("iface")
 	config.Handle(err, "searching the database for iface", false)
-	filter, err := embedded_db.SearchDatabase(db, "filter")
+	filter, err := badgerDB.Search("filter")
 	config.Handle(err, "searching the database for iface", false)
 
 	fmt.Println("Starting the goroutine with iface var being: ", iface)
@@ -145,7 +140,7 @@ func listenPackets() {
 		devFound = false
 	)
 	if iface == "" {
-		embedded_db.UpdateDatabase(db, "iface", "en0")
+		badgerDB.Update("iface", "en0")
 		iface = "en0"
 		fmt.Println("Setting iface for the very first time to en0")
 	}
@@ -172,7 +167,8 @@ func listenPackets() {
 
 	if err := handle.SetBPFFilter(filter); err != nil {
 		fmt.Println("Couldn't filter with current settings. Reseting the filter to be nothing. The filter was: ", filter)
-		err := embedded_db.UpdateDatabase(db, "filter", "")
+		badgerDB.Update("filter", "")
+
 		config.Handle(err, "Updating the database to reset filter", false)
 		filterErr = true
 	}
@@ -181,7 +177,6 @@ func listenPackets() {
 		select {
 		case <-stop:
 			fmt.Println("STOPPED THE GOROUTINE")
-			stopped <- true
 			listening = false
 			return
 		default:
@@ -213,7 +208,7 @@ func listenPackets() {
 			}
 			packetInfo.Protocol = protocol
 			packetInfo.PacketNumber = y
-			time_method, err := embedded_db.SearchDatabase(db, "time_method")
+			time_method, err := badgerDB.Search("time_method")
 			config.Handle(err, "searching the database for time_method", false)
 			if time_method == "packet_timestamp" {
 				packetInfo.Time = packet.Metadata().Timestamp.Format("15:04:05")
@@ -227,7 +222,7 @@ func listenPackets() {
 			packetInfo.PacketDump = packet.Dump()
 			messageChan <- packetInfo
 			stry := strconv.Itoa(y)
-			embedded_db.UpdateDatabase(db, stry, packetInfo.PacketDump)
+			badgerDB.Update(stry, packetInfo.PacketDump)
 			packetsInDB = append(packetsInDB, stry)
 			fmt.Println("Updated the database with: ", stry)
 			y++
@@ -281,7 +276,7 @@ func (m *Repository) SseHandler(w http.ResponseWriter, r *http.Request) {
 		config.Handle(err, "Error formatting server sent event", true)
 
 		_, err = fmt.Fprint(w, event)
-		config.Handle(err, "Error sending to client", false)
+		config.Handle(err, "Error sending to client", true)
 
 		flusher.Flush()
 		fmt.Printf("Flushed the data\n")
@@ -353,18 +348,6 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("Closed the handle before starting")
 			}
 			SSEClean()
-			// for i := 1; i <= 10; i++ {
-			// 	packetInfo.Protocol = "SSE_CLEAN"
-			// 	packetInfo.Interface = "SSE_CLEAN"
-			// 	fmt.Println("SENT SSE_CLEAN NUMBER: ", i)
-			// 	if i == 10 {
-			// 		packetInfo.SrcAddr = "done"
-			// 	}
-			// 	messageChan <- packetInfo
-			// }
-			// fmt.Println("FINISHED CLEANING SSE")
-
-			//SSEClean()
 			go listenPackets()
 		} else {
 			go func() {
@@ -372,13 +355,15 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 				switch listening {
 				case true:
 					handle.Close() //close handle just in case
+					fmt.Println("LISTENING WAS:",listening)
 					fmt.Println("Stopped successfully")
-					embedded_db.UpdateDatabase(db, "iface", newiface)
-					embedded_db.UpdateDatabase(db, "filter", newfilterstring)
+					badgerDB.Update("iface", newiface)
+					badgerDB.Update("filter", newfilterstring)
+
 					if newTimeMethod == "on" {
-						embedded_db.UpdateDatabase(db, "time_method", "packet_timestamp")
+						badgerDB.Update("time_method", "packet_timestamp")
 					} else {
-						embedded_db.UpdateDatabase(db, "time_method", "packet_proccessed_timestamp")
+						badgerDB.Update("time_method", "packet_proccessed_timestamp")
 					}
 					fmt.Println("Updated the embedded db")
 					y = 1
@@ -391,12 +376,14 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 					readyChan <- "true"
 				case false:
 					fmt.Println("Goroutine hasn't started")
-					embedded_db.UpdateDatabase(db, "iface", newiface)
-					embedded_db.UpdateDatabase(db, "filter", newfilterstring)
+					fmt.Println("LISTENING WAS:",listening)
+					badgerDB.Update("iface", newiface)
+					if newfilterstring != "" {badgerDB.Update("filter", newfilterstring)}
+					fmt.Println("newfilterstring was:", newfilterstring)
 					if newTimeMethod == "on" {
-						embedded_db.UpdateDatabase(db, "time_method", "packet_timestamp")
+						badgerDB.Update("time_method", "packet_timestamp")
 					} else {
-						embedded_db.UpdateDatabase(db, "time_method", "packet_proccessed_timestamp")
+						badgerDB.Update("time_method", "packet_proccessed_timestamp")
 					}
 					SSEClean()
 					fmt.Println("Updated the embedded db")
@@ -414,10 +401,11 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 
 // SearchPackets retrieves packetDump about a packet that is stored in embedded database
 func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Got the request to retrieve packet")
 	packetNumber := r.URL.Query().Get("packetnumber")
 	if packetNumber == "clear" {
 		for _, value := range packetsInDB {
-			err := embedded_db.DeleteDatabase(db, value)
+			err := badgerDB.Delete(value)
 			if err != nil {
 				return
 			}
@@ -425,9 +413,9 @@ func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("CLEARED all of packetsInDB:", packetsInDB)
 		packetsInDB = []string{} //reset it
 	} else if packetNumber == "list" {
-		embedded_db.ViewDatabase(db)
+		badgerDB.View()
 	} else {
-		packetInfo, err := embedded_db.SearchDatabase(db, packetNumber)
+		packetInfo, err := badgerDB.Search(packetNumber)
 		config.Handle(err, "Searching DB for packetDump", false)
 		if err != nil {
 			fmt.Println("Packet not stored")

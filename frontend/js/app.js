@@ -1,4 +1,5 @@
 startSSE()
+const port = window.location.port;
 const selectElement = document.getElementById("protocols");
 
 selectElement.addEventListener("change", function () {
@@ -138,7 +139,7 @@ function removeAllRows() {
 clearButton.addEventListener("click", function () {
     removeAllRows()
     statusMessage.innerText = "Cleared"
-    fetch(`http://localhost:8080/packetinfo?packetnumber=clear`)
+    fetch(`http://localhost:${port}/packetinfo?packetnumber=clear`)
         .catch(error => {
             statusMessage.innerText = "Couldn't Clear";
             console.error(error); // Log any errors to the console
@@ -213,7 +214,7 @@ function appendingTable(data) {
         setTimeout(function () {
             if (!sse_clean_done) {
                 console.log("SSE CLEAN IS NOT DONE BUT PROGRAM STOPPED")
-                startSSE()
+                //startSSE()
                 //es.close()
                 //location.reload()
             }
@@ -255,7 +256,7 @@ function appendingTable(data) {
         // Add click event listener to the row
         row.addEventListener('click', () => {
             let packetNumberSelected = packetNumber.innerText;
-            fetch(`http://localhost:8080/packetinfo?packetnumber=${packetNumberSelected}`)
+            fetch(`http://localhost:${port}/packetinfo?packetnumber=${packetNumberSelected}`)
                 .catch(error => {
                     statusMessage.innerText = "Couldn't retrieve information";
                     console.error(error); // Log any errors to the console

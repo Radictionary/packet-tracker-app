@@ -13,15 +13,14 @@ import (
 	"github.com/alexedwards/scs/v2"
 )
 
-var portNumber = ":8081"
-
+var portNumber = ":8000"
 var app config.AppConfig
 var session *scs.SessionManager
 
 // main is the main function
 func main() {
 	// change this to true when in production
-	app.InProduction = true
+	app.InProduction = false
 
 	// set up the session
 	session = scs.New()

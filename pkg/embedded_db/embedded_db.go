@@ -2,17 +2,28 @@ package embedded_db
 
 import (
 	"fmt"
-
 	"github.com/dgraph-io/badger/v4"
 )
 
-func CallDatabase() (*badger.DB, error) {
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badgerv4"))
-	return db, err
+type DB struct {
+	db *badger.DB
 }
 
-func ViewDatabase(db *badger.DB) {
-	_ = db.View(func(txn *badger.Txn) error {
+func NewDB(dbPath string) (*DB, error) {
+	opts := badger.DefaultOptions(dbPath)
+	db, err := badger.Open(opts)
+	if err != nil {
+		return nil, err
+	}
+	return &DB{db: db}, nil
+}
+
+func (db *DB) Close() error {
+	return db.db.Close()
+}
+
+func (db *DB) View() error {
+	return db.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 		it := txn.NewIterator(opts)
@@ -30,12 +41,11 @@ func ViewDatabase(db *badger.DB) {
 		}
 		return nil
 	})
-
 }
 
-func SearchDatabase(db *badger.DB, key string) (string, error) {
+func (db *DB) Search(key string) (string, error) {
 	var valCopy []byte
-	err := db.View(func(txn *badger.Txn) error {
+	err := db.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
 		if err != nil {
 			return err
@@ -53,16 +63,16 @@ func SearchDatabase(db *badger.DB, key string) (string, error) {
 	return string(valCopy), err
 }
 
-func UpdateDatabase(db *badger.DB, key string, value string) error {
-	err := db.Update(func(txn *badger.Txn) error {
-		err := txn.Set([]byte(string(key)), []byte(value))
+func (db *DB) Update(key string, value string) error {
+	err := db.db.Update(func(txn *badger.Txn) error {
+		err := txn.Set([]byte(key), []byte(value))
 		return err
 	})
 	return err
 }
 
-func DeleteDatabase(db *badger.DB, key string) error {
-	err := db.Update(func(txn *badger.Txn) error {
+func (db *DB) Delete(key string) error {
+	err := db.db.Update(func(txn *badger.Txn) error {
 		err := txn.Delete([]byte(key))
 		return err
 	})
