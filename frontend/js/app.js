@@ -9,17 +9,31 @@ selectElement.addEventListener("change", function () {
 
 let scrollDown = true
 let stopCounter = 0
-let listening = false
-let sse_clean_done = false
-
-//Clear all the packetDumps set before
-let itemsToRemove = localStorage.getItem("setValues")
-for (i = 0; i <= itemsToRemove; i++) {
-    localStorage.removeItem(i)
-}
 
 
+document.getElementById("controls").addEventListener("submit", function(event) {
+    event.preventDefault(); 
 
+    const form = event.target;
+    const formData = new FormData(form);
+
+    fetch("/interface", {
+        method: "POST",
+        body: new URLSearchParams(formData), // Convert FormData to URL-encoded format
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+    })
+    .then(statusMessage.innerText = "Applied!")
+    .catch(error => {
+        statusMessage.innerText = "Error changing selected settings"
+    });
+});
+
+
+
+
+//Keyboard Shortcuts
 const tableView = document.getElementById("tableView")
 document.addEventListener('keydown', function (event) {
     if (event.key === "Enter" || event.key === "Return") {
@@ -69,9 +83,6 @@ controls.addEventListener('submit', function (event) {
     } else {
         localStorage.removeItem('time_method');
     }
-
-    //es.close();
-    form.submit();
 });
 
 
@@ -83,8 +94,6 @@ const stopButton = document.getElementById('stop');
 const startButton = document.getElementById('start');
 const clearButton = document.getElementById('clear');
 function stopProgram() {
-    listening = false
-    //es.close();
     statusMessage.innerText = "Stopped"
     let data = { key: 'stop' };
     let url = '/interface';
@@ -105,12 +114,8 @@ function stopProgram() {
 }
 stopButton.addEventListener('click', function () {
     stopProgram()
-    //es.close()
-    console.log("Event source is closed")
 });
 startButton.addEventListener('click', function () {
-    listening = true
-    sse_clean_done = false
     statusMessage.innerText = "Started"
     let data = { key: 'start' };
     let url = '/interface';
@@ -122,8 +127,6 @@ startButton.addEventListener('click', function () {
         body: JSON.stringify(data)
     }
     fetch(url, requestOptions)
-        .then(response => {
-        })
         .catch(error => {
             console.error('Error sending POST request:', error);
             statusMessage.innerText = "Failed to send start message"
@@ -139,7 +142,7 @@ function removeAllRows() {
 clearButton.addEventListener("click", function () {
     removeAllRows()
     statusMessage.innerText = "Cleared"
-    fetch(`http://localhost:${port}/packetinfo?packetnumber=clear`)
+    fetch(`/packetinfo?packetnumber=clear`)
         .catch(error => {
             statusMessage.innerText = "Couldn't Clear";
             console.error(error); // Log any errors to the console
@@ -154,16 +157,15 @@ const minPacketRate = 10; // Minimum packet rate to process
 let packetRate = 50; // Start with a packet rate of 50 packets per second
 let lastTime = performance.now();
 let startedInt = 0
-let localStorageKeys = [];
 
 function startSSE() {
-    const es = new EventSource("/event");
+    const es = new EventSource("/packet");
     es.addEventListener("error", event => {
         statusMessage.innerText = "Stopped on an error";
     });
-    es.addEventListener('new-packet-update', (event) => {
-        const jsonStr = event.data.replace('data:', '').trim(); // Remove the "data:" prefix and any leading/trailing whitespace
-        const data = JSON.parse(JSON.parse(jsonStr).data); // Parse the JSON string twice to extract the data property]
+    es.addEventListener('new-packet', (event) => {
+        const jsonData = event.data
+        const data = JSON.parse(jsonData)
         appendingTable(data)
     })
 }
@@ -200,30 +202,9 @@ function appendingTable(data) {
 
         interface.innerText = data.interface;
 
-        if (data.interface == 'SSE_CLEAN') {
-            if (data.srcAddr == "done") {
-                statusMessage.innerText = "Finished setting up"
-                sse_clean_done = true
-                console.log("Finished cleaning the SSE")
-            }
-            return;
-        }
         if (data.err) {
             statusMessage.innerText = data.err
         }
-        setTimeout(function () {
-            if (!sse_clean_done) {
-                console.log("SSE CLEAN IS NOT DONE BUT PROGRAM STOPPED")
-                //startSSE()
-                //es.close()
-                //location.reload()
-            }
-        }, 3000);
-        if (data.interface != interfaceInLocalStorage && interfaceInLocalStorage != null && data.interface != "SSE_CLEAN") {
-            statusMessage.innerText = "dev: recieving information not relating to selected interface. interfaceInLocalStorage is: ", interfaceInLocalStorage;
-            return;
-        }
-
         if (startedInt <= 3) {
             if (data.customization) {
                 if (data.customization == "timestamp") {
@@ -264,8 +245,6 @@ function appendingTable(data) {
                 })
                 .then(response => response.json())
                 .then(data => {
-                    //data.packetDump); // Log the packet information to the console
-                    //showDump(data.packetDump, data.packetNumber)
                     showPopupBox(data.packetNumber, data.packetDump)
 
                 })
@@ -297,14 +276,8 @@ function showPopupBox(number, data) {
     // Set the packet number and data
     packetNumber.innerText = number;
     packetDumpOutput.innerText = data;
-    // popupContent.innerHTML = '';
-    // popupContent.appendChild(packetNumber);
-    // popupContent.appendChild(packetDumpOutput);
-
-
     // Make the box resizable
     dragHandle.addEventListener('mousedown', startDrag, false);
-
     function startDrag(e) {
         e.preventDefault();
         startY = e.clientY;
@@ -312,12 +285,10 @@ function showPopupBox(number, data) {
         document.addEventListener('mousemove', doDrag, false);
         document.addEventListener('mouseup', stopDrag, false);
     }
-
     function doDrag(e) {
         var newHeight = startHeight + (startY - e.clientY);
         popupBox.style.height = newHeight + 'px';
     }
-
     function stopDrag() {
         document.removeEventListener('mousemove', doDrag, false);
         document.removeEventListener('mouseup', stopDrag, false);
