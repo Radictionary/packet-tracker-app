@@ -395,7 +395,6 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Sorry, only POST methods are supported.")
 		fmt.Println("NOT POST")
 	}
-	render.RenderTemplate(w, "interfacechange.html", &models.TemplateData{})
 }
 
 // SearchPackets retrieves packetDump about a packet that is stored in embedded database

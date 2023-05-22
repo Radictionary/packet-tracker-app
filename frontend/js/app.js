@@ -259,15 +259,14 @@ function appendingTable(data) {
     startedInt++
 }
 
-
+const closeButton = document.getElementById('close');
+const popupContainer = document.getElementById('popupContainer');
+const popupBox = document.getElementById('popupBox');
+const dragHandle = document.getElementById('dragHandle');
+const packetDumpOutput = document.getElementById('packetDumpOutput');
+const packetNumber = document.getElementById("packetNumber")
 function showPopupBox(number, data) {
-    const popupContainer = document.getElementById('popupContainer');
-    const popupBox = document.getElementById('popupBox');
-    const dragHandle = document.getElementById('dragHandle');
-    const packetDumpOutput = document.getElementById('packetDumpOutput');
-    const packetNumber = document.getElementById("packetNumber")
     var startY, startHeight;
-
     // Show the popup box
     popupContainer.style.height = 'auto';
     popupBox.style.height = 'auto'; // Initial height
@@ -293,4 +292,9 @@ function showPopupBox(number, data) {
         document.removeEventListener('mousemove', doDrag, false);
         document.removeEventListener('mouseup', stopDrag, false);
     }
+    closeButton.addEventListener('click', function() {
+        popupBox.style.visibility = 'hidden';
+    })
+
+    
 }

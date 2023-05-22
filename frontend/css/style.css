@@ -112,8 +112,16 @@ select option:not(:checked) {
   height: 10px;
   cursor: ns-resize;
   background-color: #ccc;
+  position: static;
 }
 
 #popupContent {
   padding: 10px;
+}
+
+#close {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  background-color: #909fee;
 }
