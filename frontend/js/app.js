@@ -1,35 +1,44 @@
-startSSE()
-const port = window.location.port;
-const selectElement = document.getElementById("protocols");
+startSSE() //start inital connection with server
 
-selectElement.addEventListener("change", function () {
-    const selectedOptions = Array.from(this.selectedOptions).map(option => option.value);
-    console.log(selectedOptions);
+let scrollDown = true //start interface with interface lock set to on
+
+
+
+document.getElementById("controls").addEventListener("submit", function (event) {
+    applySettings(event);
 });
 
-let scrollDown = true
-let stopCounter = 0
+document.getElementById("interfaceInput").addEventListener("input", function (event) {
+    applySettings(event);
+});
 
+// document.getElementById("protocols").addEventListener("input", function (event) {
+//     applySettings(event);
+// });
 
-document.getElementById("controls").addEventListener("submit", function(event) {
-    event.preventDefault(); 
+document.getElementById("packetNumberMethod").addEventListener("input", function (event) {
+    applySettings(event);
+});
 
-    const form = event.target;
+function applySettings(event) {
+    event.preventDefault();
+    const form = event.target.form;
     const formData = new FormData(form);
 
-    fetch("/interface", {
+    fetch("/change", {
         method: "POST",
         body: new URLSearchParams(formData), // Convert FormData to URL-encoded format
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
         }
     })
-    .then(statusMessage.innerText = "Applied!")
-    .catch(error => {
-        statusMessage.innerText = "Error changing selected settings"
-    });
-});
-
+        .then(() => {
+            statusMessage.innerText = "Applied!";
+        })
+        .catch(error => {
+            statusMessage.innerText = "Error changing selected settings";
+        });
+}
 
 
 
@@ -61,42 +70,36 @@ document.addEventListener("keydown", function (event) {
 });
 
 
-//Interface selections and Customization
-const controls = document.getElementById("controls");
-const checkbox = controls.elements.time_method;
-checkbox.checked = localStorage.getItem('time_method') === 'on';
-
-let interfaceInput = controls.elements.interface;
-let interfaceInLocalStorage = localStorage.getItem('interfaceValue');
-if (interfaceInLocalStorage == null) {
-    interfaceInput.placeholder = "en0"
-    interfaceInput.value = "en0"
-} else {
-    interfaceInput.value = interfaceInLocalStorage;
-    interfaceInput.placeholder = interfaceInLocalStorage;
-}
-
-controls.addEventListener('submit', function (event) {
-    localStorage.setItem('interfaceValue', interfaceInput.value);
-    if (checkbox.checked) {
-        localStorage.setItem('time_method', 'on');
-    } else {
-        localStorage.removeItem('time_method');
-    }
-});
-
 
 //Control Buttons
+const controls = document.getElementById("controls");
 const packetTable = document.querySelector('#packetTable');
 const statusMessage = document.getElementById("status")
 const customization = document.getElementById("customization")
 const stopButton = document.getElementById('stop');
 const startButton = document.getElementById('start');
 const clearButton = document.getElementById('clear');
+const restartButton = document.getElementById('restart');
+startButton.addEventListener('click', function () {
+    settingsSync()
+    statusMessage.innerText = "Started"
+    let data = { key: 'start' };
+    let requestOptions = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    }
+    fetch("/change", requestOptions)
+        .catch(error => {
+            console.error('Error sending POST request:', error);
+            statusMessage.innerText = "Failed to send start message"
+        });
+});
 function stopProgram() {
     statusMessage.innerText = "Stopped"
     let data = { key: 'stop' };
-    let url = '/interface';
     let requestOptions = {
         method: 'POST',
         headers: {
@@ -104,7 +107,7 @@ function stopProgram() {
         },
         body: JSON.stringify(data)
     };
-    fetch(url, requestOptions)
+    fetch("/change", requestOptions)
         .then(response => {
         })
         .catch(error => {
@@ -115,23 +118,24 @@ function stopProgram() {
 stopButton.addEventListener('click', function () {
     stopProgram()
 });
-startButton.addEventListener('click', function () {
-    statusMessage.innerText = "Started"
-    let data = { key: 'start' };
-    let url = '/interface';
+restartButton.addEventListener("click", function () {
+    let data = { key: 'reset' };
     let requestOptions = {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(data)
-    }
-    fetch(url, requestOptions)
+    };
+    fetch("/change", requestOptions)
+        .then(response => {
+            statusMessage.innerText = "Restarted!"
+        })
         .catch(error => {
             console.error('Error sending POST request:', error);
-            statusMessage.innerText = "Failed to send start message"
+            statusMessage.innerText = "Failed to restart"
         });
-});
+})
 function removeAllRows() {
     var rowCount = packetTable.rows.length;
     // Start from the last row and remove each row
@@ -145,12 +149,15 @@ clearButton.addEventListener("click", function () {
     fetch(`/packetinfo?packetnumber=clear`)
         .catch(error => {
             statusMessage.innerText = "Couldn't Clear";
-            console.error(error); // Log any errors to the console
         });
-    popupContainer.style.display = "none"
+    popupContainer.style.height = '0';
+    popupBox.style.height = '0';
+    popupBox.style.visibility = 'hidden';
 })
 
 
+
+//Table
 const tableBody = document.getElementById('table-body');
 const maxRows = 2000;
 const minPacketRate = 10; // Minimum packet rate to process
@@ -159,6 +166,7 @@ let lastTime = performance.now();
 let startedInt = 0
 
 function startSSE() {
+    settingsSync()
     const es = new EventSource("/packet");
     es.addEventListener("error", event => {
         statusMessage.innerText = "Stopped on an error";
@@ -169,7 +177,6 @@ function startSSE() {
         appendingTable(data)
     })
 }
-
 
 function appendingTable(data) {
     if (startedInt <= 3) {
@@ -205,15 +212,7 @@ function appendingTable(data) {
         if (data.err) {
             statusMessage.innerText = data.err
         }
-        if (startedInt <= 3) {
-            if (data.customization) {
-                if (data.customization == "timestamp") {
-                    checkbox.checked = true
-                } else if (data.customization == "proccessed_timestamp") {
-                    checkbox.checked = false
-                }
-            }
-        }
+
         protocol.innerText = data.protocol;
         srcAddr.innerText = data.srcAddr;
         dstnAddr.innerText = data.dstnAddr;
@@ -237,17 +236,23 @@ function appendingTable(data) {
         // Add click event listener to the row
         row.addEventListener('click', () => {
             let packetNumberSelected = packetNumber.innerText;
-            fetch(`http://localhost:${port}/packetinfo?packetnumber=${packetNumberSelected}`)
-                .catch(error => {
-                    statusMessage.innerText = "Couldn't retrieve information";
-                    console.error(error); // Log any errors to the console
-                    return
+            fetch(`/packetinfo?packetnumber=${packetNumberSelected}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("Server returned an error");
+                    }
+                    return response.json();
                 })
-                .then(response => response.json())
                 .then(data => {
-                    showPopupBox(data.packetNumber, data.packetDump)
-
+                    // Process the successful response
+                    showPopupBox(data.packetNumber, data.packetDump);
                 })
+                .catch(error => {
+                    // Handle the error case
+                    statusMessage.innerText = "Couldn't retrieve information about the packet";
+                    console.error(error);
+                });
+
         });
         if (scrollDown) {
             window.scrollBy({
@@ -259,12 +264,17 @@ function appendingTable(data) {
     startedInt++
 }
 
+
+
+//Popup box
 const closeButton = document.getElementById('close');
 const popupContainer = document.getElementById('popupContainer');
 const popupBox = document.getElementById('popupBox');
 const dragHandle = document.getElementById('dragHandle');
 const packetDumpOutput = document.getElementById('packetDumpOutput');
 const packetNumber = document.getElementById("packetNumber")
+popupContainer.style.height = '0';
+popupBox.style.height = '0';
 function showPopupBox(number, data) {
     var startY, startHeight;
     // Show the popup box
@@ -292,9 +302,49 @@ function showPopupBox(number, data) {
         document.removeEventListener('mousemove', doDrag, false);
         document.removeEventListener('mouseup', stopDrag, false);
     }
-    closeButton.addEventListener('click', function() {
+    closeButton.addEventListener('click', function () {
+        popupContainer.style.height = '0';
+        popupBox.style.height = '0';
         popupBox.style.visibility = 'hidden';
     })
 
-    
+
 }
+
+
+
+//retrieves user settings from the backend
+const checkbox = document.getElementById('packetNumberMethod');
+const selectFilterField = document.getElementById("protocols");
+function settingsSync() {
+    fetch(`/settings`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Server returned an error");
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.timeStampMethod == "timestamp") {
+                checkbox.checked = true
+            } else if (data.timeStampMethod == "proccessed_timestamp") {
+                checkbox.checked = false
+            }
+            interfaceInput.value = data.interface;
+            interfaceInput.placeholder = data.interface;
+            var selectedOptions = data.filter.split(" or ");
+            // Iterate through each <option> element and set the selected attribute
+            Array.from(selectFilterField.options).forEach(function (option) {
+                if (selectedOptions.includes(option.value)) {
+                    option.selected = true;
+                }
+            });
+        })
+        .catch(error => {
+            statusMessage.innerText = "Couldn't retrieve user settings";
+        });
+}
+
+selectFilterField.addEventListener("blur", function () {
+    settingsSync()
+});

@@ -7,25 +7,23 @@
 </div>
 <section class="controls">
   <form method="POST" action="/interface" id="controls">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-
     <label>Interface:</label>
     <input id="interfaceInput" name="interface" type="text" value="" />
     <select name="filter" id="protocols" multiple>
-      <option value="">none</option>
+      <option value="none">none</option>
       <option value="tcp">tcp</option>
       <option value="udp">udp</option>
       <option value="arp">arp</option>
-      <option value="dns">dns</option>
     </select>
     <div class="timeMethod">
       <label for="time_method">Use packet captured time</label>
-      <input type="checkbox" name="time_method" />
+      <input type="checkbox" name="time_method" id="packetNumberMethod"/>
     </div>
     <input type="submit" value="apply" />
   </form>
   <button id="start">start</button>
   <button id="stop">stop</button>
+  <button id="restart">restart</button>
   <button id="clear">clear</button>
   <h3>Status: <span id="status">Waiting for start</span></h3>
   <h3 class="customizations">Customization: <span id="customization"></span></h3>
@@ -33,7 +31,7 @@
 </section>
 
 <table id="packetTable" class="packetTable">
-  <thead>
+  <thead style="position: sticky; z-index: 999; top: 8.4rem; background-color: rgb(17, 205, 234); border-radius: 5rem; opacity: 0.95;">
     <tr>
       <th>Interface</th>
       <th>Protocol</th>

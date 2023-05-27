@@ -9,13 +9,13 @@ type DB struct {
 	db *badger.DB
 }
 
-func NewDB(dbPath string) (*DB, error) {
+func NewDB(dbPath string) *DB {
 	opts := badger.DefaultOptions(dbPath)
 	db, err := badger.Open(opts)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	return &DB{db: db}, nil
+	return &DB{db: db}
 }
 
 func (db *DB) Close() error {

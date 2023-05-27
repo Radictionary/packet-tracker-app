@@ -19,7 +19,8 @@ func routes(app *config.AppConfig) http.Handler {
 	mux.Get("/", handlers.Repo.Home)
 	mux.Get("/packet", handlers.Repo.SseHandler)
 	mux.Get("/packetinfo", handlers.Repo.SearchPacket)
-	mux.Post("/interface", handlers.Repo.InterfaceChange)
+	mux.Get("/settings", handlers.Repo.SettingsSync)
+	mux.Post("/change", handlers.Repo.Change)
 
 
 	fileServer := http.FileServer(http.Dir("./frontend/"))

@@ -43,7 +43,7 @@ h3 {
 
 .packetTable {
   width: 80%;
-  margin: auto;
+  margin: auto auto 2rem auto;
   font-size: 2rem;
 }
 
@@ -107,7 +107,6 @@ select option:not(:checked) {
   overflow: auto; /* Enable content scrolling inside the popup box */
 }
 
-
 #dragHandle {
   height: 10px;
   cursor: ns-resize;
@@ -121,7 +120,13 @@ select option:not(:checked) {
 
 #close {
   position: absolute;
+  display: inline-block;
   right: 1rem;
   top: 1rem;
   background-color: #909fee;
+}
+
+#table-body {
+  margin-top: 2rem;
+  margin-bottom: 2rem;
 }

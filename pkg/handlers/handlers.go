@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,45 +20,35 @@ import (
 )
 
 type PacketStruct struct {
-	Interface      string `json:"interface"`
-	Protocol       string `json:"protocol"`
-	SrcAddr        string `json:"srcAddr"`
-	DstnAddr       string `json:"dstnAddr"`
-	PacketNumber   int    `json:"packetNumber"`
-	Time           string `json:"time"`
-	Err            string `json:"err"`
-	Customization  string `json:"customization"`
-	ProtocolFilter string `json:"protocolFilter"`
-}
-
-type PacketRetrieval struct {
+	Interface    string `json:"interface"`
+	Protocol     string `json:"protocol"`
+	SrcAddr      string `json:"srcAddr"`
+	DstnAddr     string `json:"dstnAddr"`
 	PacketNumber int    `json:"packetNumber"`
+	Time         string `json:"time"`
+	Err          string `json:"err"`
+}
+type PacketRetrieval struct {
+	PacketNumber string `json:"packetNumber"`
 	PacketDump   string `json:"packetDump"`
 }
-
+type SettingsRetrieval struct {
+	Interface       string `json:"interface"`
+	Filter          string `json:"filter"`
+	TimeStampMethod string `json:"timeStampMethod"`
+}
 var (
-	badgerDB    *embedded_db.DB
-	stop        chan struct{}
-	filterErr   bool
-	packetInfo  PacketStruct
-	handle      *pcap.Handle
-	packetsInDB []string
-	listening   bool
-	dns         bool
-	y           int = 1
-)
-
-func init() {
-	go startSSE()
-	listening = false
-	messageChan = make(chan PacketStruct)
+	badgerDB          *embedded_db.DB = embedded_db.NewDB("/tmp/badgerv4")
+	app               *config.AppConfig
 	stop = make(chan struct{})
-	badgerDB, _ = embedded_db.NewDB("/tmp/badgerv4")
-}
-
-type RequestData struct {
-	Protocols []string `json:"protocols"`
-}
+	filterErr         bool
+	packetInfo        PacketStruct
+	settingsRetrieval SettingsRetrieval
+	handle            *pcap.Handle
+	packetsInDB       []string
+	listening         bool = false
+	y                 int = 1
+)
 
 // Repo the repository used by the handlers
 var Repo *Repository
@@ -82,65 +71,49 @@ func NewHandlers(r *Repository) {
 }
 
 // detectProtocol detects the protocol and returns what it is
-func detectProtocol(packet gopacket.Packet) (string, error) {
+func detectProtocol(packet gopacket.Packet) string {
 	// Check for transport layer
 	if transport := packet.TransportLayer(); transport != nil {
 		switch transport.LayerType() {
 		case layers.LayerTypeTCP:
-			return "TCP", nil
+			return "TCP"
 		case layers.LayerTypeUDP:
-			// Check for DNS protocol
-			if app := packet.ApplicationLayer(); app != nil {
-				dnsLayer := &layers.DNS{}
-				if err := dnsLayer.DecodeFromBytes(app.Payload(), gopacket.NilDecodeFeedback); err == nil {
-					return "DNS", nil
-				}
-			}
-			return "UDP", nil
+			return "UDP"
 		}
 	}
-
 	// Check for network layer
 	if network := packet.NetworkLayer(); network != nil {
 		switch network.LayerType() {
 		case layers.LayerTypeIPv4:
-			return "IPv4", nil
+			return "IPv4"
 		case layers.LayerTypeIPv6:
-			return "IPv6", nil
+			return "IPv6"
 		case layers.LayerTypeICMPv4:
-			return "ICMPv4", nil
+			return "ICMPv4"
 		case layers.LayerTypeICMPv6:
-			return "ICMPv6", nil
+			return "ICMPv6"
 		}
 	}
-
 	// Check for ARP layer
 	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
-		return "ARP", nil
+		return "ARP"
 	}
 
-	return "N/A", errors.New("protocol not found")
+	return "N/A"
 }
 
 // listenPackets function listens for packets in the background and sends packets to the frontend via SSE
 func listenPackets() {
-	fmt.Println("Started the goroutine")
 	listening = true
 	iface, err := badgerDB.Search("iface")
 	config.Handle(err, "searching the database for iface", false)
 	filter, err := badgerDB.Search("filter")
 	config.Handle(err, "searching the database for iface", false)
-	if strings.Contains(filter, " or dns or ") || strings.Contains(filter, "dns") || strings.Contains(filter, "dns or ") {
-		filter = strings.Replace(filter, " or dns or ", "udp", -1)
-		filter = strings.Replace(filter, "dns", "udp", -1)
-		filter = strings.Replace(filter, "dns or ", "udp", -1)
-		dns = true
-	} else {
-		dns = false
-	}
 
-	fmt.Println("Starting the goroutine with iface var being: ", iface)
-	fmt.Println("Starting the goroutine with filter var being: ", filter)
+	time_method, err := badgerDB.Search("time_method")
+	config.Handle(err, "Getting the user set time method", false)
+
+	fmt.Printf("Starting the goroutine\tinterface:%v\tfilter:%v\ttime_method:%v\n", iface, filter, time_method)
 	var (
 		snaplen  = int32(1600)
 		promisc  = false
@@ -156,7 +129,6 @@ func listenPackets() {
 	if err != nil {
 		config.Handle(err, "Finding all devices", true)
 	}
-
 	for _, device := range devices {
 		if device.Name == iface {
 			devFound = true
@@ -181,16 +153,9 @@ func listenPackets() {
 		case <-stop:
 			fmt.Println("STOPPED THE GOROUTINE")
 			listening = false
-			dns = false
 			return
 		default:
-			protocol, err := detectProtocol(packet)
-			if dns && protocol != "DNS" {
-				fmt.Println("Found packet but it wasn't dns")
-				return
-			}
-
-			config.Handle(err, "detecting protocol", false)
+			protocol := detectProtocol(packet)
 			fmt.Println("Packet: ", y)
 			networkLayer := packet.NetworkLayer()
 			if networkLayer != nil {
@@ -217,24 +182,17 @@ func listenPackets() {
 			}
 			packetInfo.Protocol = protocol
 			packetInfo.PacketNumber = y
-			time_method, err := badgerDB.Search("time_method")
-			if err != nil {
-				time_method = "packet_timestamp"
-			}
-			//config.Handle(err, "searching the database for time_method", false)
-			if time_method == "packet_timestamp" {
+			if time_method == "packet_proccessed_timestamp" {
+				packetInfo.Time = time.Now().Format("15:04:01")
+			} else {
 				packetInfo.Time = packet.Metadata().Timestamp.Format("15:04:05")
-				packetInfo.Customization = "timestamp"
-			} else if time_method == "packet_proccessed_timestamp" {
-				packetInfo.Time = time.Now().Format("15:04:05")
-				packetInfo.Customization = "proccessed_timestamp"
+
 			}
 			packetInfo.Interface = iface
-			packetInfo.ProtocolFilter = filter
 			messageChan <- packetInfo
 			stry := strconv.Itoa(y)
-			badgerDB.Update(stry, packet.Dump())
-			packetsInDB = append(packetsInDB, stry)
+			badgerDB.Update(stry, packet.Dump())    //must be stored as string because that is currently badgerDB implementation
+			packetsInDB = append(packetsInDB, stry) //keeps track of the packets in the database to remove later if needed by the user
 			y++
 		}
 	}
@@ -242,6 +200,7 @@ func listenPackets() {
 
 // Home is the handler for the home page
 func (m *Repository) Home(w http.ResponseWriter, r *http.Request) {
+	go startSSE()
 	render.RenderTemplate(w, "home.html", &models.TemplateData{})
 }
 
@@ -298,18 +257,15 @@ func (m *Repository) SseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Expires", "0")
-
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "SSE not supported", http.StatusInternalServerError)
 		return
 	}
-
 	registerChan <- w
 	defer func() {
 		unregisterChan <- w
 	}()
-
 	for packet := range messageChan {
 		sendToAllClients("new-packet", packet)
 		flusher.Flush()
@@ -327,8 +283,8 @@ func startSSE() {
 }
 
 // InterfaceChange takes care of any changes to how to listen for packets
-func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/interface" {
+func (m *Repository) Change(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/change" {
 		http.Error(w, "404 not found.", http.StatusNotFound)
 		return
 	}
@@ -352,7 +308,7 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 		}
 		newTimeMethod := r.FormValue("time_method")
 		body, err := io.ReadAll(r.Body)
-		config.Handle(err, "Reading the body for new interface", false)
+		config.Handle(err, "Reading the body for new changes", false)
 
 		if strings.Contains(string(body), "stop") {
 			go func() {
@@ -367,27 +323,35 @@ func (m *Repository) InterfaceChange(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("Closed the handle before starting")
 			}
 			go listenPackets()
+		} else if strings.Contains(string(body), "reset") {
+			if listening {
+				handle.Close()
+				fmt.Println("handle is closed")
+			}
+			y = 1
+			go listenPackets()
 		} else {
 			go func() {
 				if listening {
 					handle.Close()
 					fmt.Println("handle is closed")
 				}
-				badgerDB.Update("iface", newiface)
-				badgerDB.Update("filter", newfilterstring)
-
+				if newiface != "" {
+					badgerDB.Update("inteface", newiface)
+				}
+				if newfilterstring != "" && newfilterstring != "none"{
+					badgerDB.Update("filter", newfilterstring)
+				} else if newfilterstring == "none" {
+					badgerDB.Update("filter", "")
+				}
 				if newTimeMethod == "on" {
 					badgerDB.Update("time_method", "packet_timestamp")
 				} else {
 					badgerDB.Update("time_method", "packet_proccessed_timestamp")
 				}
 				fmt.Println("Updated the embedded db")
-				//y = 1
-				if newfilterstring == "none" {
-					newfilterstring = ""
-				}
 				if listening {
-					go listenPackets()
+					go listenPackets() //don't stop listening for packets if it is already listening
 				}
 			}()
 		}
@@ -412,25 +376,21 @@ func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("CLEARED all of packetsInDB:", packetsInDB)
 		y = 1
 		packetsInDB = []string{} //reset it
-	} else if packetNumber == "list" {
+	} else if packetNumber == "list" && !app.InProduction { //only have the database listing current data in development
 		badgerDB.View()
-	} else if packetNumber == "sync"{
-		
 	} else {
 		packetInfo, err := badgerDB.Search(packetNumber)
-		config.Handle(err, "Searching DB for packetDump", false)
 		if err != nil {
 			fmt.Println("Packet not stored")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		packetNumberInt, err := strconv.Atoi(packetNumber)
 		config.Handle(err, "Converting string to int", false)
 		packetDump := PacketRetrieval{
-			PacketNumber: packetNumberInt,
+			PacketNumber: packetNumber,
 			PacketDump:   packetInfo,
 		}
-		// Marshal the packet object to JSON
+
 		responseJSON, err := json.Marshal(packetDump)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -442,3 +402,33 @@ func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (m *Repository) SettingsSync(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	iface, err := badgerDB.Search("iface")
+	config.Handle(err, "searching the database for iface", false)
+	settingsRetrieval.Interface = iface
+
+	filter, err := badgerDB.Search("filter")
+	config.Handle(err, "searching the database for iface", false)
+	
+	settingsRetrieval.Filter = filter
+
+	time_method, err := badgerDB.Search("time_method")
+	if err != nil {
+		time_method = "packet_timestamp" //setting the timestamp method for the first time
+	}
+	if time_method == "packet_timestamp" {
+		settingsRetrieval.TimeStampMethod = "timestamp"
+	} else if time_method == "packet_proccessed_timestamp" {
+		settingsRetrieval.TimeStampMethod = "proccessed_timestamp"
+	}
+
+	jsonPayload, err := json.Marshal(settingsRetrieval)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonPayload)
+}
