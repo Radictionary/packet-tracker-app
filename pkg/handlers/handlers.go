@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,9 +16,11 @@ import (
 	"github.com/Radictionary/website/pkg/embedded_db"
 	"github.com/Radictionary/website/pkg/models"
 	"github.com/Radictionary/website/pkg/render"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/google/gopacket/pcapgo"
 )
 
 type PacketStruct struct {
@@ -37,17 +41,19 @@ type SettingsRetrieval struct {
 	Filter          string `json:"filter"`
 	TimeStampMethod string `json:"timeStampMethod"`
 }
+
 var (
 	badgerDB          *embedded_db.DB = embedded_db.NewDB("/tmp/badgerv4")
 	app               *config.AppConfig
-	stop = make(chan struct{})
-	filterErr         bool
+	stop                   = make(chan struct{})
+	filterErr         bool = false
+	interfaceErr      bool = false
 	packetInfo        PacketStruct
 	settingsRetrieval SettingsRetrieval
 	handle            *pcap.Handle
 	packetsInDB       []string
 	listening         bool = false
-	y                 int = 1
+	y                 int  = 1
 )
 
 // Repo the repository used by the handlers
@@ -71,35 +77,62 @@ func NewHandlers(r *Repository) {
 }
 
 // detectProtocol detects the protocol and returns what it is
-func detectProtocol(packet gopacket.Packet) string {
-	// Check for transport layer
+func detectProtocol(packet gopacket.Packet) (string, string, string) {
+	var protocol, sourceAddress, destAddress string
+
 	if transport := packet.TransportLayer(); transport != nil {
 		switch transport.LayerType() {
 		case layers.LayerTypeTCP:
-			return "TCP"
+			protocol = "TCP"
+			tcp, _ := transport.(*layers.TCP)
+			sourceAddress = packet.NetworkLayer().NetworkFlow().Src().String()
+			destAddress = packet.NetworkLayer().NetworkFlow().Dst().String()
+			if tcp.DstPort == 80 || tcp.SrcPort == 80 {
+				protocol = "HTTP"
+			}
+			if tcp.DstPort == 443 || tcp.SrcPort == 443 {
+				protocol = "HTTPS"
+			}
 		case layers.LayerTypeUDP:
-			return "UDP"
+			protocol = "UDP"
+			sourceAddress = packet.NetworkLayer().NetworkFlow().Src().String()
+			destAddress = packet.NetworkLayer().NetworkFlow().Dst().String()
 		}
-	}
-	// Check for network layer
-	if network := packet.NetworkLayer(); network != nil {
-		switch network.LayerType() {
-		case layers.LayerTypeIPv4:
-			return "IPv4"
-		case layers.LayerTypeIPv6:
-			return "IPv6"
-		case layers.LayerTypeICMPv4:
-			return "ICMPv4"
-		case layers.LayerTypeICMPv6:
-			return "ICMPv6"
-		}
-	}
-	// Check for ARP layer
-	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
-		return "ARP"
 	}
 
-	return "N/A"
+	if protocol == "" {
+		if network := packet.NetworkLayer(); network != nil {
+			switch network.LayerType() {
+			case layers.LayerTypeIPv4:
+				protocol = "IPv4"
+				ipv4, _ := network.(*layers.IPv4)
+				sourceAddress = ipv4.SrcIP.String()
+				destAddress = ipv4.DstIP.String()
+			case layers.LayerTypeIPv6:
+				protocol = "IPv6"
+				ipv6, _ := network.(*layers.IPv6)
+				sourceAddress = ipv6.SrcIP.String()
+				destAddress = ipv6.DstIP.String()
+			case layers.LayerTypeICMPv4:
+				protocol = "ICMPv4"
+			case layers.LayerTypeICMPv6:
+				protocol = "ICMPv6"
+			}
+		}
+	}
+
+	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
+		protocol = "ARP"
+		arpPacket := arpLayer.(*layers.ARP)
+		sourceAddress = net.IP(arpPacket.SourceProtAddress).String()
+		destAddress = net.IP(arpPacket.DstProtAddress).String()
+	}
+
+	if protocol == "" {
+		protocol = "N/A"
+	}
+
+	return protocol, sourceAddress, destAddress
 }
 
 // listenPackets function listens for packets in the background and sends packets to the frontend via SSE
@@ -108,10 +141,11 @@ func listenPackets() {
 	iface, err := badgerDB.Search("iface")
 	config.Handle(err, "searching the database for iface", false)
 	filter, err := badgerDB.Search("filter")
-	config.Handle(err, "searching the database for iface", false)
-
+	config.Handle(err, "searching the database for filter", false)
 	time_method, err := badgerDB.Search("time_method")
 	config.Handle(err, "Getting the user set time method", false)
+	file_save, err := badgerDB.Search("savePath")
+	config.Handle(err, "Getting the user set save path", false)
 
 	fmt.Printf("Starting the goroutine\tinterface:%v\tfilter:%v\ttime_method:%v\n", iface, filter, time_method)
 	var (
@@ -123,7 +157,9 @@ func listenPackets() {
 	if iface == "" {
 		badgerDB.Update("iface", "en0")
 		iface = "en0"
+		interfaceErr = true
 		fmt.Println("Setting iface for the very first time to en0")
+
 	}
 	devices, err := pcap.FindAllDevs()
 	if err != nil {
@@ -148,6 +184,17 @@ func listenPackets() {
 		filterErr = true
 	}
 	source := gopacket.NewPacketSource(handle, handle.LinkType()) //LinkType() is the decoder to use
+	var pcapFile *os.File
+	if file_save != "" {
+		pcapFile, err = os.Create(file_save + ".pcap")
+		if err != nil {
+			config.Handle(err, "Creating pcap file", true)
+		}
+		defer pcapFile.Close()
+	}
+	pcapWriter := pcapgo.NewWriter(pcapFile)
+	pcapWriter.WriteFileHeader(uint32(snaplen), handle.LinkType())
+
 	for packet := range source.Packets() {
 		select {
 		case <-stop:
@@ -155,30 +202,13 @@ func listenPackets() {
 			listening = false
 			return
 		default:
-			protocol := detectProtocol(packet)
+			var protocol string
+			protocol, packetInfo.SrcAddr, packetInfo.DstnAddr = detectProtocol(packet)
 			fmt.Println("Packet: ", y)
-			networkLayer := packet.NetworkLayer()
-			if networkLayer != nil {
-				srcAddr := networkLayer.NetworkFlow().Src().String()
-				dstnAddr := networkLayer.NetworkFlow().Dst().String()
-				packetInfo.SrcAddr = srcAddr
-				packetInfo.DstnAddr = dstnAddr
-			} else if protocol == "ARP" {
-				arpLayer := packet.Layer(layers.LayerTypeARP)
-				arpPacket, _ := arpLayer.(*layers.ARP)
-
-				srcIP := arpPacket.SourceHwAddress //srcMAC
-				dstnIP := arpPacket.DstHwAddress   //dstMAC
-				_ = arpPacket.SourceProtAddress
-				_ = arpPacket.DstProtAddress
-				packetInfo.SrcAddr = string(srcIP)
-				packetInfo.DstnAddr = string(dstnIP)
-			} else {
-				packetInfo.SrcAddr = "not found"
-				packetInfo.DstnAddr = "not found"
-			}
 			if filterErr {
 				packetInfo.Err = "Filter was invalid. Reset the filter."
+			} else if interfaceErr {
+				packetInfo.Err = "Interface was invalid. Reset the interface to en0."
 			}
 			packetInfo.Protocol = protocol
 			packetInfo.PacketNumber = y
@@ -193,7 +223,16 @@ func listenPackets() {
 			stry := strconv.Itoa(y)
 			badgerDB.Update(stry, packet.Dump())    //must be stored as string because that is currently badgerDB implementation
 			packetsInDB = append(packetsInDB, stry) //keeps track of the packets in the database to remove later if needed by the user
+
+			if file_save != "" {
+				err := pcapWriter.WritePacket(packet.Metadata().CaptureInfo, packet.Data())
+				if err != nil {
+					config.Handle(err, "Writing packet to pcap file", false)
+				}
+			}
+
 			y++
+
 		}
 	}
 }
@@ -309,6 +348,21 @@ func (m *Repository) Change(w http.ResponseWriter, r *http.Request) {
 		newTimeMethod := r.FormValue("time_method")
 		body, err := io.ReadAll(r.Body)
 		config.Handle(err, "Reading the body for new changes", false)
+		fmt.Println("body is:", string(body))
+		var data map[string]interface{}
+
+		// Parse the JSON response
+		if err := json.Unmarshal(body, &data); err != nil {
+			fmt.Println("Error parsing JSON:", err)
+			return
+		}
+
+		// Check if the "fullPath" key exists in the parsed data
+		if fullPath, ok := data["fullPath"].(string); ok {
+			badgerDB.Update("savePath", fullPath)
+		} else {
+			fmt.Println("Full path not found in JSON")
+		}
 
 		if strings.Contains(string(body), "stop") {
 			go func() {
@@ -339,7 +393,7 @@ func (m *Repository) Change(w http.ResponseWriter, r *http.Request) {
 				if newiface != "" {
 					badgerDB.Update("inteface", newiface)
 				}
-				if newfilterstring != "" && newfilterstring != "none"{
+				if newfilterstring != "" && newfilterstring != "none" {
 					badgerDB.Update("filter", newfilterstring)
 				} else if newfilterstring == "none" {
 					badgerDB.Update("filter", "")
@@ -411,7 +465,7 @@ func (m *Repository) SettingsSync(w http.ResponseWriter, r *http.Request) {
 
 	filter, err := badgerDB.Search("filter")
 	config.Handle(err, "searching the database for iface", false)
-	
+
 	settingsRetrieval.Filter = filter
 
 	time_method, err := badgerDB.Search("time_method")

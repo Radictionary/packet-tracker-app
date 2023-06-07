@@ -12,9 +12,9 @@ document.getElementById("interfaceInput").addEventListener("input", function (ev
     applySettings(event);
 });
 
-// document.getElementById("protocols").addEventListener("input", function (event) {
-//     applySettings(event);
-// });
+document.getElementById("protocols").addEventListener("input", function (event) {
+    applySettings(event);
+});
 
 document.getElementById("packetNumberMethod").addEventListener("input", function (event) {
     applySettings(event);
@@ -246,6 +246,8 @@ function appendingTable(data) {
                 .then(data => {
                     // Process the successful response
                     showPopupBox(data.packetNumber, data.packetDump);
+
+                    console.log(data.packetDump)
                 })
                 .catch(error => {
                     // Handle the error case
@@ -284,7 +286,8 @@ function showPopupBox(number, data) {
 
     // Set the packet number and data
     packetNumber.innerText = number;
-    packetDumpOutput.innerText = data;
+    // packetDumpOutput.innerText = data;
+    beutficalDisplay(data)
     // Make the box resizable
     dragHandle.addEventListener('mousedown', startDrag, false);
     function startDrag(e) {
@@ -314,7 +317,7 @@ function showPopupBox(number, data) {
 
 
 //retrieves user settings from the backend
-const checkbox = document.getElementById('packetNumberMethod');
+const packetTimeMethod = document.getElementById('packetNumberMethod');
 const selectFilterField = document.getElementById("protocols");
 function settingsSync() {
     fetch(`/settings`)
@@ -326,9 +329,9 @@ function settingsSync() {
         })
         .then(data => {
             if (data.timeStampMethod == "timestamp") {
-                checkbox.checked = true
+                packetTimeMethod.checked = true
             } else if (data.timeStampMethod == "proccessed_timestamp") {
-                checkbox.checked = false
+                packetTimeMethod.checked = false
             }
             interfaceInput.value = data.interface;
             interfaceInput.placeholder = data.interface;
@@ -348,3 +351,102 @@ function settingsSync() {
 selectFilterField.addEventListener("blur", function () {
     settingsSync()
 });
+
+
+function beutficalDisplay(packetData) {
+    // Parse packet data into an object with named layers
+    function parsePacketData(packetData) {
+        const packetDataLines = packetData.split('\n');
+        const packetInfo = {};
+        let currentLayer = null;
+        let currentContent = '';
+
+        for (const line of packetDataLines) {
+            if (line.startsWith('---')) {
+                if (currentLayer) {
+                    packetInfo[currentLayer.layerName] = currentContent;
+                }
+                currentLayer = extractLayerInfo(line);
+                currentContent = '';
+            } else {
+                currentContent += line + '\n';
+            }
+        }
+
+        if (currentLayer) {
+            packetInfo[currentLayer.layerName] = currentContent;
+        }
+
+        return packetInfo;
+    }
+
+    // Extract layer name from the line
+    function extractLayerInfo(line) {
+        const match = line.match(/---\s+(.+)\s+---/);
+        if (match) {
+            const layerName = match[1].trim();
+            return { layerName };
+        }
+        return null;
+    }
+
+    // Generate the HTML for the dropdowns
+    function generateDropdowns(packetInfo) {
+        let html = '';
+
+        for (const layer in packetInfo) {
+            html += `
+      <details open>
+        <summary>${layer}</summary>
+        <pre>${packetInfo[layer]}</pre>
+      </details>
+    `;
+        }
+
+        return html;
+    }
+
+    // Parse packet data and generate dropdowns
+    const parsedPacketData = parsePacketData(packetData);
+    const dropdownsHTML = generateDropdowns(parsedPacketData);
+
+    // Display the dropdowns on the page
+    const container = document.getElementById('packet-container');
+    container.innerHTML = dropdownsHTML;
+
+}
+
+function showFileDialog(checked) {
+    if (checked) {
+        var fullPath = prompt("Choose a directory to save the file, including the file name:");
+        if (fullPath !== null) {
+            const comfirmation = confirm("Are you sure you want to save the file to " + fullPath + "?");
+            if (comfirmation) {
+                fetch("/change", {
+                    method: 'POST',
+                    body: JSON.stringify({ fullPath }),
+                })
+                    .then(response => {
+                        statusMessage.innerText = "Saving packets from now on"
+                    })
+                    .catch(error => {
+                        console.error('Error sending POST request:', error);
+                        statusMessage.innerText = "Failed to start saving packets"
+                    });
+            }
+        }
+    } else {
+        fullPath = ""
+        fetch("/change", {
+            method: 'POST',
+            body: JSON.stringify({ fullPath }),
+        })
+            .then(response => {
+                statusMessage.innerText = "Not saving packets anymore"
+            })
+            .catch(error => {
+                console.error('Error sending POST request:', error);
+                statusMessage.innerText = "Failed to stop saving packets"
+            });
+    }
+}

@@ -16,5 +16,7 @@ Note: Change app.InProduction to true when in production
 ### To-Do
 - [ ] More filter options including support for more specific protocols
 - [ ] More visual customization options
-- [ ] Better persisting data and optimizations
-- [ ] Packet Dump more organized when shown
+- [ ] Save current packets in a pcap file
+- [x] Packet Dump more organized when shown
+- [ ] Be able to choose location of pcap save and choose file format of save
+

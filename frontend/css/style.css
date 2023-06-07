@@ -71,6 +71,12 @@ select option:not(:checked) {
   left: 0.5rem;
 }
 
+.saveMethod {
+  position: absolute;
+  top:4rem;
+  left: 0.5rem;
+}
+
 #status {
   color: rgb(34, 169, 119);
 }

@@ -1,6 +1,7 @@
 {{template "base" .}}
 {{define "description"}}
 <meta name="description" content="My wireshark clone">
+<title>RadinShark</title>
 {{end}}
 
 {{define "content_box"}}
@@ -16,8 +17,12 @@
       <option value="arp">arp</option>
     </select>
     <div class="timeMethod">
-      <label for="time_method">Use packet captured time</label>
+      <label for="time_method" checked>Use packet captured time</label>
       <input type="checkbox" name="time_method" id="packetNumberMethod"/>
+    </div>
+    <div class="saveMethod">
+      <label for="save_method" checked>Save captured packets</label>
+      <input type="checkbox" name="save_method" id="save_method" onchange="showFileDialog(this.checked)"/>
     </div>
     <input type="submit" value="apply" />
   </form>
@@ -51,6 +56,9 @@
     <div id="popupContent">
       <button id="close">close</button>
       <h2>Packet Dump #<span id="packetNumber"></span></h2>
+      <br>
+      <div id="packet-container"></div>
+      <br>
       <h4 id="packetDumpOutput"></h4>
     </div>
   </div>
