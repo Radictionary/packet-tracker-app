@@ -9,14 +9,14 @@ Note: Change app.InProduction to true when in production
 - Backend:
   - Built in Go version 1.20
   - Uses the [chi router](github.com/go-chi/chi)
-  - Uses [alex edwards scs session management](github.com/alexedwards/scs)
   - Contains embedded database for persisting logic
 
 
 ### To-Do
 - [ ] More filter options including support for more specific protocols
-- [ ] More visual customization options
-- [ ] Save current packets in a pcap file
+- [x] More visual customization options
+- [x] Save current packets in a pcap file
 - [x] Packet Dump more organized when shown
 - [ ] Be able to choose location of pcap save and choose file format of save
+- [x] Open pcap files
 

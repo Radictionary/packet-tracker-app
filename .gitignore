@@ -1,4 +1,3 @@
 Dockerfile
-Dockerfile.test
 archives.txt
-.env
+*.pcap 

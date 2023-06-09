@@ -1,8 +1,7 @@
 startSSE() //start inital connection with server
 
 let scrollDown = true //start interface with interface lock set to on
-
-
+let lengthState = true
 
 document.getElementById("controls").addEventListener("submit", function (event) {
     applySettings(event);
@@ -16,9 +15,7 @@ document.getElementById("protocols").addEventListener("input", function (event) 
     applySettings(event);
 });
 
-document.getElementById("packetNumberMethod").addEventListener("input", function (event) {
-    applySettings(event);
-});
+
 
 function applySettings(event) {
     event.preventDefault();
@@ -80,6 +77,7 @@ const stopButton = document.getElementById('stop');
 const startButton = document.getElementById('start');
 const clearButton = document.getElementById('clear');
 const restartButton = document.getElementById('restart');
+const savePacketsButton = document.getElementById('save_method');
 startButton.addEventListener('click', function () {
     settingsSync()
     statusMessage.innerText = "Started"
@@ -204,23 +202,26 @@ function appendingTable(data) {
         const protocol = document.createElement('td');
         const srcAddr = document.createElement('td');
         const dstnAddr = document.createElement('td');
+        const length = document.createElement('td');
         const packetNumber = document.createElement('td');
         const timeCell = document.createElement('td');
 
-        interface.innerText = data.interface;
 
         if (data.err) {
             statusMessage.innerText = data.err
         }
 
+        interface.innerText = data.interface;
         protocol.innerText = data.protocol;
         srcAddr.innerText = data.srcAddr;
         dstnAddr.innerText = data.dstnAddr;
+        if (lengthState) { length.innerText = data.length; }
         packetNumber.innerText = data.packetNumber;
         timeCell.innerText = data.time;
 
         row.appendChild(interface);
         row.appendChild(protocol);
+        if (lengthState) { row.appendChild(length); console.log("Appending to row, and the variable of length is set to: " + lengthState) }
         row.appendChild(srcAddr);
         row.appendChild(dstnAddr);
         row.appendChild(packetNumber);
@@ -317,7 +318,6 @@ function showPopupBox(number, data) {
 
 
 //retrieves user settings from the backend
-const packetTimeMethod = document.getElementById('packetNumberMethod');
 const selectFilterField = document.getElementById("protocols");
 function settingsSync() {
     fetch(`/settings`)
@@ -328,11 +328,7 @@ function settingsSync() {
             return response.json();
         })
         .then(data => {
-            if (data.timeStampMethod == "timestamp") {
-                packetTimeMethod.checked = true
-            } else if (data.timeStampMethod == "proccessed_timestamp") {
-                packetTimeMethod.checked = false
-            }
+           
             interfaceInput.value = data.interface;
             interfaceInput.placeholder = data.interface;
             var selectedOptions = data.filter.split(" or ");
@@ -342,16 +338,23 @@ function settingsSync() {
                     option.selected = true;
                 }
             });
+            if (data.packetSaveDir === "") {
+                savePacketsButton.checked = false
+                document.getElementById("savingToFileNotification").style.visibility = "hidden"
+            } else {
+                savePacketsButton.checked = true
+                document.getElementById("savingToFileNotification").innerText = "Saving to: " + data.packetSaveDir + ".pcap"
+            }
         })
         .catch(error => {
             statusMessage.innerText = "Couldn't retrieve user settings";
+            console.log(error)
         });
 }
 
 selectFilterField.addEventListener("blur", function () {
     settingsSync()
 });
-
 
 function beutficalDisplay(packetData) {
     // Parse packet data into an object with named layers
@@ -416,18 +419,22 @@ function beutficalDisplay(packetData) {
 
 }
 
+
+//Saving and Uploading pcap files
 function showFileDialog(checked) {
     if (checked) {
         var fullPath = prompt("Choose a directory to save the file, including the file name:");
-        if (fullPath !== null) {
-            const comfirmation = confirm("Are you sure you want to save the file to " + fullPath + "?");
+        if (fullPath != null) {
+            const comfirmation = confirm("Are you sure you want to save the packets to " + fullPath + ".pcap?");
             if (comfirmation) {
                 fetch("/change", {
                     method: 'POST',
                     body: JSON.stringify({ fullPath }),
                 })
-                    .then(response => {
+                    .then(() => {
                         statusMessage.innerText = "Saving packets from now on"
+                        document.getElementById("savingToFileNotification").style.visibility = "visible"
+                        document.getElementById("savingToFileNotification").innerText = "Saving to: " + fullPath
                     })
                     .catch(error => {
                         console.error('Error sending POST request:', error);
@@ -441,8 +448,9 @@ function showFileDialog(checked) {
             method: 'POST',
             body: JSON.stringify({ fullPath }),
         })
-            .then(response => {
-                statusMessage.innerText = "Not saving packets anymore"
+            .then(() => {
+                document.getElementById("savingToFileNotification").style.visibility = "hidden"
+                statusMessage.innerText = "Not saving packets anymore to the file";
             })
             .catch(error => {
                 console.error('Error sending POST request:', error);
@@ -450,3 +458,50 @@ function showFileDialog(checked) {
             });
     }
 }
+
+document.getElementById('pcapUpload').addEventListener('click', function () {
+    document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', function (event) {
+    var file = event.target.files[0];
+    if (file) {
+        uploadFile(file);
+    }
+});
+
+function uploadFile(file) {
+    var formData = new FormData();
+    formData.append('file', file);
+
+    fetch('/upload', {
+        method: 'POST',
+        body: formData
+    })
+        .then(function (response) {
+            if (response.ok) {
+                console.log('File uploaded successfully.');
+                // Perform any necessary UI updates
+            } else {
+                console.error('Failed to upload file:', response.statusText);
+                // Perform any necessary UI updates
+            }
+        })
+        .catch(function (error) {
+            console.error('Failed to upload file:', error);
+            // Perform any necessary UI updates
+        });
+}
+
+var checkbox = document.getElementById('includeLength');
+var lengthRow = document.getElementById('lengthRow');
+
+checkbox.addEventListener('change', function () {
+    if (checkbox.checked) {
+        lengthRow.style.display = 'table-cell';
+        lengthState = true
+    } else {
+        lengthRow.style.display = 'none';
+        lengthState = false
+    }
+});

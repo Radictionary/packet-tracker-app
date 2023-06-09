@@ -8,7 +8,6 @@ type TemplateData struct {
 	DataMap   map[string]interface{}
 	Data      interface{}
 	String    string
-	CSRFToken string
 	Flash     string
 	Warning   string
 	Error     string
