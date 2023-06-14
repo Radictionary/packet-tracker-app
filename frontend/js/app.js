@@ -1,162 +1,8 @@
 startSSE() //start inital connection with server
 
-let scrollDown = true //start interface with interface lock set to on
-let lengthState = true
-
-document.getElementById("controls").addEventListener("submit", function (event) {
-    applySettings(event);
-});
-
-document.getElementById("interfaceInput").addEventListener("input", function (event) {
-    applySettings(event);
-});
-
-document.getElementById("protocols").addEventListener("input", function (event) {
-    applySettings(event);
-});
-
-
-
-function applySettings(event) {
-    event.preventDefault();
-    const form = event.target.form;
-    const formData = new FormData(form);
-
-    fetch("/change", {
-        method: "POST",
-        body: new URLSearchParams(formData), // Convert FormData to URL-encoded format
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-    })
-        .then(() => {
-            statusMessage.innerText = "Applied!";
-        })
-        .catch(error => {
-            statusMessage.innerText = "Error changing selected settings";
-        });
-}
-
-
-
-//Keyboard Shortcuts
-const tableView = document.getElementById("tableView")
-document.addEventListener('keydown', function (event) {
-    if (event.key === "Enter" || event.key === "Return") {
-        if (scrollDown == false) {
-            scrollDown = true
-            tableView.innerText = "(locked)"
-            window.scrollBy({
-                top: packetTable.offsetHeight, // Scroll to the the end of the table's height
-                behavior: "auto"
-            });
-        } else {
-            scrollDown = false
-            tableView.innerText = "(unlocked)"
-        }
-    }
-});
-document.addEventListener("keydown", function (event) {
-    if (event.key === "t") {
-        window.scrollBy({
-            top: -packetTable.offsetHeight, // Scroll to the the top of the table's height
-            behavior: "auto"
-        });
-        console.log("The key 't' is pressed!")
-    }
-});
-
-
-
-//Control Buttons
-const controls = document.getElementById("controls");
-const packetTable = document.querySelector('#packetTable');
-const statusMessage = document.getElementById("status")
-const customization = document.getElementById("customization")
-const stopButton = document.getElementById('stop');
-const startButton = document.getElementById('start');
-const clearButton = document.getElementById('clear');
-const restartButton = document.getElementById('restart');
-const savePacketsButton = document.getElementById('save_method');
-startButton.addEventListener('click', function () {
-    settingsSync()
-    statusMessage.innerText = "Started"
-    let data = { key: 'start' };
-    let requestOptions = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    }
-    fetch("/change", requestOptions)
-        .catch(error => {
-            console.error('Error sending POST request:', error);
-            statusMessage.innerText = "Failed to send start message"
-        });
-});
-function stopProgram() {
-    statusMessage.innerText = "Stopped"
-    let data = { key: 'stop' };
-    let requestOptions = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    };
-    fetch("/change", requestOptions)
-        .then(response => {
-        })
-        .catch(error => {
-            console.error('Error sending POST request:', error);
-            statusMessage.innerText = "Failed to send stop message"
-        });
-}
-stopButton.addEventListener('click', function () {
-    stopProgram()
-});
-restartButton.addEventListener("click", function () {
-    let data = { key: 'reset' };
-    let requestOptions = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    };
-    fetch("/change", requestOptions)
-        .then(response => {
-            statusMessage.innerText = "Restarted!"
-        })
-        .catch(error => {
-            console.error('Error sending POST request:', error);
-            statusMessage.innerText = "Failed to restart"
-        });
-})
-function removeAllRows() {
-    var rowCount = packetTable.rows.length;
-    // Start from the last row and remove each row
-    for (var i = rowCount - 1; i > 0; i--) {
-        packetTable.deleteRow(i);
-    }
-}
-clearButton.addEventListener("click", function () {
-    removeAllRows()
-    statusMessage.innerText = "Cleared"
-    fetch(`/packetinfo?packetnumber=clear`)
-        .catch(error => {
-            statusMessage.innerText = "Couldn't Clear";
-        });
-    popupContainer.style.height = '0';
-    popupBox.style.height = '0';
-    popupBox.style.visibility = 'hidden';
-})
-
-
-
 //Table
 const tableBody = document.getElementById('table-body');
+const tableContainer = document.querySelector('.table-container');
 const maxRows = 2000;
 const minPacketRate = 10; // Minimum packet rate to process
 let packetRate = 50; // Start with a packet rate of 50 packets per second
@@ -168,6 +14,7 @@ function startSSE() {
     const es = new EventSource("/packet");
     es.addEventListener("error", event => {
         statusMessage.innerText = "Stopped on an error";
+        console.error(event)
     });
     es.addEventListener('new-packet', (event) => {
         const jsonData = event.data
@@ -177,10 +24,9 @@ function startSSE() {
 }
 
 function appendingTable(data) {
-    if (startedInt <= 3) {
+    if (startedInt <= 2) {
         statusMessage.innerText = "Started"
     }
-
     // Update the packet rate based on the current load on the browser
     const currentTime = performance.now();
     const elapsedTime = currentTime - lastTime;
@@ -221,12 +67,13 @@ function appendingTable(data) {
 
         row.appendChild(interface);
         row.appendChild(protocol);
-        if (lengthState) { row.appendChild(length); console.log("Appending to row, and the variable of length is set to: " + lengthState) }
+        if (lengthState) { row.appendChild(length) }
         row.appendChild(srcAddr);
         row.appendChild(dstnAddr);
         row.appendChild(packetNumber);
         row.appendChild(timeCell);
         tableBody.appendChild(row);
+        if (scrollDown) { tableContainer.scrollTop = tableContainer.scrollHeight; }
         if (tableBody.children.length > maxRows) {
             const excessRows = tableBody.children.length - maxRows;
             for (let i = 0; i < excessRows; i++) {
@@ -234,24 +81,19 @@ function appendingTable(data) {
             }
         }
 
-        // Add click event listener to the row
         row.addEventListener('click', () => {
             let packetNumberSelected = packetNumber.innerText;
             fetch(`/packetinfo?packetnumber=${packetNumberSelected}`)
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error("Server returned an error");
+                        throw new Error("Could not get packet information");
                     }
                     return response.json();
                 })
                 .then(data => {
-                    // Process the successful response
-                    showPopupBox(data.packetNumber, data.packetDump);
-
-                    console.log(data.packetDump)
+                    showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump);
                 })
                 .catch(error => {
-                    // Handle the error case
                     statusMessage.innerText = "Couldn't retrieve information about the packet";
                     console.error(error);
                 });
@@ -268,54 +110,59 @@ function appendingTable(data) {
 }
 
 
+fetch("/recover")
+    .then(response => response.json())
+    .then(data => {
+        let recoverdPacketsNum = data.length
+        if (data.length === 0) {
+            statusMessage.innerText = "No recovered packets"
+        } else {
+            data.forEach(packet => {
+                const recov_row = tableBody.insertRow();
+                const recov_interface = recov_row.insertCell();
+                const recov_protocol = recov_row.insertCell();
+                const recov_length = recov_row.insertCell();
+                const recov_srcAddr = recov_row.insertCell();
+                const recov_dstnAddr = recov_row.insertCell();
+                const recov_packetNumber = recov_row.insertCell();
+                const recov_timeCell = recov_row.insertCell();
+                recov_interface.innerText = packet.interface;
+                recov_protocol.innerText = packet.protocol;
+                recov_srcAddr.innerText = packet.srcAddr;
+                recov_dstnAddr.innerText = packet.dstnAddr;
+                if (lengthState) { recov_length.innerText = packet.length; }
+                recov_packetNumber.innerText = packet.packetNumber;
+                recov_timeCell.innerText = packet.time;
+                recov_row.addEventListener('click', () => {
+                    let packetNumberSelected = recov_packetNumber.innerText;
+                    fetch(`/packetinfo?packetnumber=${packetNumberSelected}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error("Could not get packet information");
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump);
 
-//Popup box
-const closeButton = document.getElementById('close');
-const popupContainer = document.getElementById('popupContainer');
-const popupBox = document.getElementById('popupBox');
-const dragHandle = document.getElementById('dragHandle');
-const packetDumpOutput = document.getElementById('packetDumpOutput');
-const packetNumber = document.getElementById("packetNumber")
-popupContainer.style.height = '0';
-popupBox.style.height = '0';
-function showPopupBox(number, data) {
-    var startY, startHeight;
-    // Show the popup box
-    popupContainer.style.height = 'auto';
-    popupBox.style.height = 'auto'; // Initial height
-    popupBox.style.visibility = 'visible'
+                        })
+                        .catch(error => {
+                            statusMessage.innerText = "Couldn't retrieve information about the packet";
+                            console.error(error);
+                        });
 
-    // Set the packet number and data
-    packetNumber.innerText = number;
-    // packetDumpOutput.innerText = data;
-    beutficalDisplay(data)
-    // Make the box resizable
-    dragHandle.addEventListener('mousedown', startDrag, false);
-    function startDrag(e) {
-        e.preventDefault();
-        startY = e.clientY;
-        startHeight = parseInt(window.getComputedStyle(popupBox).height, 10);
-        document.addEventListener('mousemove', doDrag, false);
-        document.addEventListener('mouseup', stopDrag, false);
-    }
-    function doDrag(e) {
-        var newHeight = startHeight + (startY - e.clientY);
-        popupBox.style.height = newHeight + 'px';
-    }
-    function stopDrag() {
-        document.removeEventListener('mousemove', doDrag, false);
-        document.removeEventListener('mouseup', stopDrag, false);
-    }
-    closeButton.addEventListener('click', function () {
-        popupContainer.style.height = '0';
-        popupBox.style.height = '0';
-        popupBox.style.visibility = 'hidden';
+                });
+            });
+            statusMessage.innerText = "Recovered " + recoverdPacketsNum + " unsaved packets";
+        }
+        setTimeout(function () {
+            statusMessage.innerText = "Waiting for start"
+        }, 850)
     })
-
-
-}
-
-
+    .catch(error => {
+        statusMessage.innerText = "Failed to recover packets";
+        console.error(error);
+    });
 
 //retrieves user settings from the backend
 const selectFilterField = document.getElementById("protocols");
@@ -328,7 +175,7 @@ function settingsSync() {
             return response.json();
         })
         .then(data => {
-           
+
             interfaceInput.value = data.interface;
             interfaceInput.placeholder = data.interface;
             var selectedOptions = data.filter.split(" or ");
@@ -356,120 +203,6 @@ selectFilterField.addEventListener("blur", function () {
     settingsSync()
 });
 
-function beutficalDisplay(packetData) {
-    // Parse packet data into an object with named layers
-    function parsePacketData(packetData) {
-        const packetDataLines = packetData.split('\n');
-        const packetInfo = {};
-        let currentLayer = null;
-        let currentContent = '';
-
-        for (const line of packetDataLines) {
-            if (line.startsWith('---')) {
-                if (currentLayer) {
-                    packetInfo[currentLayer.layerName] = currentContent;
-                }
-                currentLayer = extractLayerInfo(line);
-                currentContent = '';
-            } else {
-                currentContent += line + '\n';
-            }
-        }
-
-        if (currentLayer) {
-            packetInfo[currentLayer.layerName] = currentContent;
-        }
-
-        return packetInfo;
-    }
-
-    // Extract layer name from the line
-    function extractLayerInfo(line) {
-        const match = line.match(/---\s+(.+)\s+---/);
-        if (match) {
-            const layerName = match[1].trim();
-            return { layerName };
-        }
-        return null;
-    }
-
-    // Generate the HTML for the dropdowns
-    function generateDropdowns(packetInfo) {
-        let html = '';
-
-        for (const layer in packetInfo) {
-            html += `
-      <details open>
-        <summary>${layer}</summary>
-        <pre>${packetInfo[layer]}</pre>
-      </details>
-    `;
-        }
-
-        return html;
-    }
-
-    // Parse packet data and generate dropdowns
-    const parsedPacketData = parsePacketData(packetData);
-    const dropdownsHTML = generateDropdowns(parsedPacketData);
-
-    // Display the dropdowns on the page
-    const container = document.getElementById('packet-container');
-    container.innerHTML = dropdownsHTML;
-
-}
-
-
-//Saving and Uploading pcap files
-function showFileDialog(checked) {
-    if (checked) {
-        var fullPath = prompt("Choose a directory to save the file, including the file name:");
-        if (fullPath != null) {
-            const comfirmation = confirm("Are you sure you want to save the packets to " + fullPath + ".pcap?");
-            if (comfirmation) {
-                fetch("/change", {
-                    method: 'POST',
-                    body: JSON.stringify({ fullPath }),
-                })
-                    .then(() => {
-                        statusMessage.innerText = "Saving packets from now on"
-                        document.getElementById("savingToFileNotification").style.visibility = "visible"
-                        document.getElementById("savingToFileNotification").innerText = "Saving to: " + fullPath
-                    })
-                    .catch(error => {
-                        console.error('Error sending POST request:', error);
-                        statusMessage.innerText = "Failed to start saving packets"
-                    });
-            }
-        }
-    } else {
-        fullPath = ""
-        fetch("/change", {
-            method: 'POST',
-            body: JSON.stringify({ fullPath }),
-        })
-            .then(() => {
-                document.getElementById("savingToFileNotification").style.visibility = "hidden"
-                statusMessage.innerText = "Not saving packets anymore to the file";
-            })
-            .catch(error => {
-                console.error('Error sending POST request:', error);
-                statusMessage.innerText = "Failed to stop saving packets"
-            });
-    }
-}
-
-document.getElementById('pcapUpload').addEventListener('click', function () {
-    document.getElementById('fileInput').click();
-});
-
-document.getElementById('fileInput').addEventListener('change', function (event) {
-    var file = event.target.files[0];
-    if (file) {
-        uploadFile(file);
-    }
-});
-
 function uploadFile(file) {
     var formData = new FormData();
     formData.append('file', file);
@@ -479,29 +212,12 @@ function uploadFile(file) {
         body: formData
     })
         .then(function (response) {
-            if (response.ok) {
-                console.log('File uploaded successfully.');
-                // Perform any necessary UI updates
-            } else {
+            if (!response.ok) {
+                statusMessage.innerText = "Failed to upload file"
                 console.error('Failed to upload file:', response.statusText);
-                // Perform any necessary UI updates
             }
         })
         .catch(function (error) {
             console.error('Failed to upload file:', error);
-            // Perform any necessary UI updates
         });
 }
-
-var checkbox = document.getElementById('includeLength');
-var lengthRow = document.getElementById('lengthRow');
-
-checkbox.addEventListener('change', function () {
-    if (checkbox.checked) {
-        lengthRow.style.display = 'table-cell';
-        lengthState = true
-    } else {
-        lengthRow.style.display = 'none';
-        lengthState = false
-    }
-});

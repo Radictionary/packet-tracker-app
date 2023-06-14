@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Radictionary/website/pkg/config"
-	"github.com/Radictionary/website/pkg/models"
+	"github.com/Radictionary/website/pkg/template_models"
 	"html/template"
 	"log"
 	"net/http"
@@ -20,13 +20,13 @@ func NewTemplates(a *config.AppConfig) {
 	app = a
 }
 
-func AddDefaultData(td *models.TemplateData) *models.TemplateData {
+func AddDefaultData(td *template_models.TemplateData) *template_models.TemplateData {
 
 	return td
 }
 
 // RenderTemplate renders a template
-func RenderTemplate(w http.ResponseWriter, html string, td *models.TemplateData) {
+func RenderTemplate(w http.ResponseWriter, html string, td *template_models.TemplateData) {
 	var tc map[string]*template.Template
 
 	if app.UseCache {

@@ -4,7 +4,7 @@ body {
   text-align: center;
   width: 100%;
   background-color: #1b6bdba6;
-  overflow-x: hidden;
+  overflow: hidden;
   max-width: 100vw;
   margin: 0;
 }
@@ -20,6 +20,7 @@ h3 {
 }
 
 .controls {
+  overflow: none;
   position: sticky;
   position: -webkit-sticky;
   top: 0;
@@ -45,7 +46,6 @@ h3 {
   width: 80%;
   margin: auto auto 2rem auto;
   font-size: 2rem;
-  overflow-y: auto;
 }
 
 /* Style for selected options */
@@ -84,8 +84,9 @@ select option:not(:checked) {
 
 #tableView {
   position: absolute;
-  top: -0;
-  right: 1rem;
+  top: 4.6rem;
+  left: 0.4rem;
+  font-size: 1rem;
   /* top: 0.5rem; */
 }
 
@@ -137,9 +138,28 @@ select option:not(:checked) {
   margin-top: 2rem;
   margin-bottom: 2rem;
 }
-/* 
-#pcapUpload {
+
+.table-container {
+  max-height: 82vh;
+  overflow-y: auto;
+}
+.mainControls {
   position: absolute;
+  top: 0.6rem;
   right: 1rem;
-  top: 7rem;
-} */
+}
+.packetTypeContainer {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+}
+.packetLengthContainer {
+  position: absolute;
+  top: 1rem;
+  left: 8rem;
+}
+.packetSavedContainer {
+  position: absolute;
+  top: 1rem;
+  left: 20rem;
+}

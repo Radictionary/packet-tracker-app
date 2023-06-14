@@ -4,56 +4,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
-	"sync"
 
+	"github.com/Radictionary/website/models"
+	"github.com/Radictionary/website/packet"
 	"github.com/Radictionary/website/pkg/config"
-	"github.com/Radictionary/website/pkg/embedded_db"
-	"github.com/Radictionary/website/pkg/models"
 	"github.com/Radictionary/website/pkg/render"
+	"github.com/Radictionary/website/pkg/template_models"
+	"github.com/Radictionary/website/redis"
+	"github.com/Radictionary/website/sse"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"github.com/google/gopacket/pcapgo"
 )
 
-type PacketStruct struct {
-	Interface    string `json:"interface"`
-	Protocol     string `json:"protocol"`
-	SrcAddr      string `json:"srcAddr"`
-	DstnAddr     string `json:"dstnAddr"`
-	Length int `json:"length"`
-	PacketNumber int    `json:"packetNumber"`
-	Time         string `json:"time"`
-	Err          string `json:"err"`
-}
-type PacketRetrieval struct {
-	PacketNumber string `json:"packetNumber"`
-	PacketDump   string `json:"packetDump"`
-}
-type SettingsRetrieval struct {
-	Interface     string `json:"interface"`
-	Filter        string `json:"filter"`
-	PacketSaveDir string `json:"packetSaveDir"`
-}
-
 var (
-	badgerDB          *embedded_db.DB = embedded_db.NewDB("/tmp/badgerv4")
-	app               *config.AppConfig
-	stop                   = make(chan struct{})
-	filterErr         bool = false
-	interfaceErr      bool = false
-	packetInfo        PacketStruct
-	settingsRetrieval SettingsRetrieval
-	handle            *pcap.Handle
-	packetsInDB       []string
+	stop              = make(chan struct{})
+	packetInfo        models.PacketStruct
+	settingsRetrieval models.SettingsRetrieval
 	listening         bool = false
-	packetNumber      int  = 1
+	packetNumber           = new(int)
+	MessageChan            = make(chan models.PacketStruct)
 )
 
 // Repo the repository used by the handlers
@@ -76,209 +48,15 @@ func NewHandlers(r *Repository) {
 	Repo = r
 }
 
-// detectProtocol detects the protocol and returns what it is
-func detectProtocol(packet gopacket.Packet) (string, string, string) {
-	var protocol, sourceAddress, destAddress string
-
-	if transport := packet.TransportLayer(); transport != nil {
-		switch transport.LayerType() {
-		case layers.LayerTypeTCP:
-			protocol = "TCP"
-			tcp, _ := transport.(*layers.TCP)
-			sourceAddress = packet.NetworkLayer().NetworkFlow().Src().String()
-			destAddress = packet.NetworkLayer().NetworkFlow().Dst().String()
-			if tcp.DstPort == 80 || tcp.SrcPort == 80 {
-				protocol = "HTTP"
-			}
-			if tcp.DstPort == 443 || tcp.SrcPort == 443 {
-				protocol = "HTTPS"
-			}
-		case layers.LayerTypeUDP:
-			protocol = "UDP"
-			sourceAddress = packet.NetworkLayer().NetworkFlow().Src().String()
-			destAddress = packet.NetworkLayer().NetworkFlow().Dst().String()
-		}
-	}
-	if protocol == "" {
-		if network := packet.NetworkLayer(); network != nil {
-			switch network.LayerType() {
-			case layers.LayerTypeIPv4:
-				protocol = "IPv4"
-				ipv4, _ := network.(*layers.IPv4)
-				sourceAddress = ipv4.SrcIP.String()
-				destAddress = ipv4.DstIP.String()
-			case layers.LayerTypeIPv6:
-				protocol = "IPv6"
-				ipv6, _ := network.(*layers.IPv6)
-				sourceAddress = ipv6.SrcIP.String()
-				destAddress = ipv6.DstIP.String()
-			case layers.LayerTypeICMPv4:
-				protocol = "ICMPv4"
-			case layers.LayerTypeICMPv6:
-				protocol = "ICMPv6"
-			}
-		}
-	}
-	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
-		protocol = "ARP"
-		arpPacket := arpLayer.(*layers.ARP)
-		sourceAddress = net.IP(arpPacket.SourceProtAddress).String()
-		destAddress = net.IP(arpPacket.DstProtAddress).String()
-	}
-	if protocol == "" {
-		protocol = "N/A"
-	}
-
-	return protocol, sourceAddress, destAddress
-}
-
-// listenPackets function listens for packets in the background and sends packets to the frontend via SSE
-func listenPackets() {
-	listening = true
-	iface, err := badgerDB.Search("iface")
-	config.Handle(err, "searching the database for iface", false)
-	filter, err := badgerDB.Search("filter")
-	config.Handle(err, "searching the database for filter", false)
-	file_save, err := badgerDB.Search("savePath")
-	config.Handle(err, "Getting the user set save path", false)
-
-	fmt.Printf("Starting the goroutine\tinterface:%v\tfilter:%v\t\n", iface, filter)
-	var (
-		snaplen  = int32(1600)
-		promisc  = false
-		timeout  = pcap.BlockForever
-		devFound = false
-	)
-	if iface == "" {
-		badgerDB.Update("iface", "en0")
-		iface = "en0"
-		interfaceErr = true
-		fmt.Println("Setting iface for the very first time to en0")
-
-	}
-	devices, err := pcap.FindAllDevs()
-	if err != nil {
-		config.Handle(err, "Finding all devices", true)
-	}
-	for _, device := range devices {
-		if device.Name == iface {
-			devFound = true
-		}
-	}
-	if !devFound {
-		config.Handle(err, "Device selected does not exist", true)
-	}
-	handle, err = pcap.OpenLive(iface, snaplen, promisc, timeout)
-	config.Handle(err, "Finding all devices", true)
-
-	if err := handle.SetBPFFilter(filter); err != nil {
-		fmt.Println("Couldn't filter with current settings. Reseting the filter to be nothing. The filter was: ", filter)
-		badgerDB.Update("filter", "")
-
-		config.Handle(err, "Updating the database to reset filter", false)
-		filterErr = true
-	}
-	source := gopacket.NewPacketSource(handle, handle.LinkType()) //LinkType() is the decoder to use
-	var pcapFile *os.File
-	if file_save != "" {
-		pcapFile, err = os.Create(file_save + ".pcap")
-		if err != nil {
-			config.Handle(err, "Creating pcap file", true)
-		}
-		defer pcapFile.Close()
-	}
-	pcapWriter := pcapgo.NewWriter(pcapFile)
-	pcapWriter.WriteFileHeader(uint32(snaplen), handle.LinkType())
-
-	for packet := range source.Packets() {
-		select {
-		case <-stop:
-			fmt.Println("STOPPED THE GOROUTINE")
-			listening = false
-			return
-		default:
-			var protocol string
-			protocol, packetInfo.SrcAddr, packetInfo.DstnAddr = detectProtocol(packet)
-			fmt.Println("Packet: ", packetNumber)
-			if filterErr {
-				packetInfo.Err = "Filter was invalid. Reset the filter."
-			} else if interfaceErr {
-				packetInfo.Err = "Interface was invalid. Reset the interface to en0."
-			}
-			packetInfo.Protocol = protocol
-			packetInfo.PacketNumber = packetNumber
-			packetInfo.Time = packet.Metadata().Timestamp.Format("15:04:05")
-			packetInfo.Interface = iface
-			packetInfo.Length = packet.Metadata().Length
-			messageChan <- packetInfo
-			stry := strconv.Itoa(packetNumber)
-			badgerDB.Update(stry, packet.Dump())    //must be stored as string because that is currently badgerDB implementation
-			packetsInDB = append(packetsInDB, stry) //keeps track of the packets in the database to remove later if needed by the user
-
-			if file_save != "" {
-				err := pcapWriter.WritePacket(packet.Metadata().CaptureInfo, packet.Data())
-				if err != nil {
-					config.Handle(err, "Writing packet to pcap file", false)
-				}
-			}
-			packetNumber++
-		}
-	}
-}
-
 // Home is the handler for the home page
 func (m *Repository) Home(w http.ResponseWriter, r *http.Request) {
-	go startSSE()
-	render.RenderTemplate(w, "home.html", &models.TemplateData{})
+	err := redis.InitRedisConnection()
+	config.Handle(err, "Redis connection error", false)
+	*packetNumber = 1
+	go sse.StartSSE()
+	render.RenderTemplate(w, "home.html", &template_models.TemplateData{})
 }
 
-var (
-	clients        = make(map[http.ResponseWriter]struct{})
-	clientsMutex   sync.Mutex
-	messageChan    = make(chan PacketStruct)
-	registerChan   = make(chan http.ResponseWriter)
-	unregisterChan = make(chan http.ResponseWriter)
-)
-
-func sendToClient(client http.ResponseWriter, event string, data interface{}) {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		fmt.Printf("Error marshaling event data to JSON: %v\n", err)
-		unregisterChan <- client
-		return
-	}
-
-	_, err = fmt.Fprintf(client, "event: %s\ndata: %s\n\n", event, jsonData)
-	if err != nil {
-		fmt.Printf("Error sending SSE to client: %v\n", err)
-		unregisterChan <- client
-	}
-
-	flusher, ok := client.(http.Flusher)
-	if ok {
-		flusher.Flush()
-	}
-}
-func sendToAllClients(event string, data interface{}) {
-	clientsMutex.Lock()
-	defer clientsMutex.Unlock()
-
-	for client := range clients {
-		sendToClient(client, event, data)
-	}
-}
-func registerClient(w http.ResponseWriter) {
-	clientsMutex.Lock()
-	defer clientsMutex.Unlock()
-
-	clients[w] = struct{}{}
-}
-func unregisterClient(w http.ResponseWriter) {
-	clientsMutex.Lock()
-	defer clientsMutex.Unlock()
-
-	delete(clients, w)
-}
 func (m *Repository) SseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -290,23 +68,13 @@ func (m *Repository) SseHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SSE not supported", http.StatusInternalServerError)
 		return
 	}
-	registerChan <- w
+	sse.RegisterChan <- w
 	defer func() {
-		unregisterChan <- w
+		sse.UnregisterChan <- w
 	}()
-	for packet := range messageChan {
-		sendToAllClients("new-packet", packet)
+	for packet := range MessageChan {
+		sse.SendToAllClients("new-packet", packet)
 		flusher.Flush()
-	}
-}
-func startSSE() {
-	for {
-		select {
-		case client := <-registerChan:
-			registerClient(client)
-		case client := <-unregisterChan:
-			unregisterClient(client)
-		}
 	}
 }
 
@@ -331,56 +99,47 @@ func (m *Repository) Change(w http.ResponseWriter, r *http.Request) {
 			}
 			newfilterstring += filter
 		}
-		if newfilterstring != "" {
-			fmt.Println("THE NEW FILTER IS: ", newfilterstring)
-		}
 		body, err := io.ReadAll(r.Body)
-		config.Handle(err, "Reading the body for new changes", false)
+		config.Handle(err, "Reading the body", false)
 
 		var data map[string]interface{}
 		_ = json.Unmarshal(body, &data)
 		// Check if the "fullPath" key exists in the parsed data, and only then will full path be set
 		if fullPath, ok := data["fullPath"].(string); ok {
-			badgerDB.Update("savePath", fullPath)
+			redis.StoreData("savePath", fullPath)
+		} else if save, ok := data["save"].(string); ok {
+			packet.SavePackets(save)
 		}
 
 		if strings.Contains(string(body), "stop") {
-			go func() {
+			if listening {
 				stop <- struct{}{}
-				handle.Close()
-				fmt.Println("Handle is closed")
-			}()
+			}
+			listening = false
 			return
 		} else if strings.Contains(string(body), "start") {
 			if listening {
-				handle.Close()
-				fmt.Println("Closed the handle before starting")
+				stop <- struct{}{}
 			}
-			go listenPackets()
-		} else if strings.Contains(string(body), "reset") {
-			if listening {
-				handle.Close()
-				fmt.Println("handle is closed")
-			}
-			packetNumber = 1
-			go listenPackets()
+			go packet.ListenPackets(packetInfo, packetNumber, stop, MessageChan)
+			listening = true
+		} else if strings.Contains(string(body), "save") {
+			//packet.SavePackets()
 		} else {
 			go func() {
 				if listening {
-					handle.Close()
-					fmt.Println("handle is closed")
+					stop <- struct{}{}
 				}
 				if newiface != "" {
-					badgerDB.Update("iface", newiface)
+					redis.StoreData("interface", newiface)
 				}
 				if newfilterstring != "" && newfilterstring != "none" {
-					badgerDB.Update("filter", newfilterstring)
+					redis.StoreData("filter", newfilterstring)
 				} else if newfilterstring == "none" {
-					badgerDB.Update("filter", "")
+					redis.StoreData("filter", "")
 				}
-				fmt.Println("Updated the embedded db")
 				if listening {
-					go listenPackets() //don't stop listening for packets if it is already listening
+					go packet.ListenPackets(packetInfo, packetNumber, stop, MessageChan)
 				}
 			}()
 		}
@@ -393,58 +152,41 @@ func (m *Repository) Change(w http.ResponseWriter, r *http.Request) {
 // SearchPackets retrieves packetDump about a packet that is stored in embedded database
 func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Println("Got the request to retrieve packet")
 	neededpacketNumber := r.URL.Query().Get("packetnumber")
 	if neededpacketNumber == "clear" {
-		for _, value := range packetsInDB {
-			err := badgerDB.Delete(value)
-			if err != nil {
-				return
-			}
-		}
-		fmt.Println("CLEARED all of packetsInDB:", packetsInDB)
-		packetNumber = 1
-		packetsInDB = []string{} //reset it
-	} else if neededpacketNumber == "list" && !app.InProduction { //only have the database listing current data in development
-		badgerDB.View()
-	} else {
-		packetInfo, err := badgerDB.Search(neededpacketNumber)
-		if err != nil {
-			fmt.Println("Packet not stored")
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		config.Handle(err, "Converting string to int", false)
-		packetDump := PacketRetrieval{
-			PacketNumber: neededpacketNumber,
-			PacketDump:   packetInfo,
-		}
-
-		responseJSON, err := json.Marshal(packetDump)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+		redis.InitRedisConnection()
+		redis.ClearPackets()
 		w.WriteHeader(http.StatusOK)
-		w.Write(responseJSON)
-		fmt.Println("Successfully found packet information and it is sent")
+		return
 	}
+	result, err := redis.RetrieveStruct("packet:" + neededpacketNumber)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println("Error retrieving packet from redis in json format:", err)
+		return
+	}
+	packetStruct, err := json.Marshal(result)
+	config.Handle(err, "Json Marshaling PacketStruct", false)
+	w.WriteHeader(http.StatusOK)
+	w.Write(packetStruct)
 }
 
 func (m *Repository) SettingsSync(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	iface, err := badgerDB.Search("iface")
+	iface, err := redis.RetrieveData("interface")
 	config.Handle(err, "searching the database for iface", false)
 	settingsRetrieval.Interface = iface
 
-	filter, err := badgerDB.Search("filter")
+	filter, err := redis.RetrieveData("filter")
 	config.Handle(err, "searching the database for iface", false)
 
 	settingsRetrieval.Filter = filter
 
-	fileSave, err := badgerDB.Search("savePath")
-	config.Handle(err, "searching the database for savePath", false)
+	fileSave, err := redis.RetrieveData("savePath")
+	if err != nil && !strings.Contains(err.Error(), "does not exist") {
+		fmt.Println("ERROR searching for savePath:", err)
+	}
 	settingsRetrieval.PacketSaveDir = fileSave
 
 	jsonPayload, err := json.Marshal(settingsRetrieval)
@@ -484,35 +226,34 @@ func (m *Repository) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer handle.Close()
-
-	// Create a packet source from the pcap handle
-	var openedPacketsfromFile int = 1
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	for packet := range packetSource.Packets() {
-		var protocol string
-			protocol, packetInfo.SrcAddr, packetInfo.DstnAddr = detectProtocol(packet)
-			fmt.Println("Packet: ", openedPacketsfromFile)
-			if filterErr {
-				packetInfo.Err = "Filter was invalid. Reset the filter."
-			} else if interfaceErr {
-				packetInfo.Err = "Interface was invalid. Reset the interface to en0."
-			}
-			packetInfo.Protocol = protocol
-			packetInfo.PacketNumber = openedPacketsfromFile
-			packetInfo.Time = packet.Metadata().Timestamp.Format("15:04:05")
-			packetInfo.Interface = "N/A"
-			packetInfo.Length = packet.Metadata().Length
-			messageChan <- packetInfo
-			stry := strconv.Itoa(openedPacketsfromFile)
-			badgerDB.Update(stry, packet.Dump())    //must be stored as string because that is currently badgerDB implementation
-			packetsInDB = append(packetsInDB, stry) //keeps track of the packets in the database to remove later if needed by the user
-			openedPacketsfromFile++
-	}
-	packetNumber = 1
+	packet.ListenPacketsFromFile(handle, packetInfo, MessageChan)
 
 	// Delete the temporary file after processing
 	os.Remove(tempFile.Name())
 
-	fmt.Printf("Uploaded file: %s\n", handler.Filename)
+	fmt.Printf("Uploaded file parsed successfully:%s\n", handler.Filename)
 	w.WriteHeader(http.StatusOK)
+}
+
+func (m *Repository) Recover(w http.ResponseWriter, r *http.Request) {
+	redis.InitRedisConnection()
+	packets, err := redis.RecoverPackets()
+	if err != nil {
+		fmt.Println("Error recovering packets from redis function")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	} else if len(packets) == 0 {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("[]"))
+		return
+	}
+	*packetNumber = len(packets) + 1
+	packetsJSON, err := json.Marshal(packets)
+	if err != nil {
+		fmt.Println("Error marshalling recovered packets:",err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(packetsJSON)
 }

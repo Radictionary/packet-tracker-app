@@ -26,22 +26,24 @@
       <br><label id="savingToFileNotification"></label>
     </div>
   </form>
+  <div class="mainControls">
   <button id="start">start</button>
   <button id="stop">stop</button>
-  <button id="restart">restart</button>
   <button id="clear">clear</button>
+  <button id="save">save</button>
   <input type="file" id="fileInput" style="display: none;" />
   <button id="pcapUpload">Open from File</button>
-  <h3>Status: <span id="status">Waiting for start</span></h3>
+  </div>
+  <h3>Status: <span id="status">Recovering unsaved packets...</span></h3>
   <h3 class="customizations">Customization: <span id="customization"></span></h3>
   <h3 id="tableView"></h3>
 </section>
 
 
-
+<div class="table-container">
 <table id="packetTable" class="packetTable">
   <thead
-    style="position: sticky; z-index: 999; top: 8.4rem; background-color: rgb(17, 205, 234); border-radius: 5rem; opacity: 0.95;">
+    style="position: sticky; z-index: 999; top: -0.01rem; background-color: rgb(17, 205, 234); border-radius: 5rem; opacity: 0.95;">
     <tr>
       <th>Interface</th>
       <th>Protocol</th>
@@ -55,6 +57,7 @@
   <tbody id="table-body">
   </tbody>
 </table>
+</div>
 
 <div id="popupContainer">
   <div id="popupBox">
@@ -62,6 +65,9 @@
     <div id="popupContent">
       <button id="close">close</button>
       <h2>Packet Dump #<span id="packetNumber"></span></h2>
+      <h3 class="packetTypeContainer">Type:<span id="packetType"></span></h3>
+      <h3 class="packetLengthContainer">Length:<span id="packetLength"></span> bytes</h3>
+      <h3 class="packetSavedContainer">Saved:<span id="packetSaved"></span></h3>
       <br>
       <div id="packet-container"></div>
       <br>
@@ -73,5 +79,6 @@
 {{end}}
 
 {{define "js"}}
+<script src="/frontend/js/ui.js"></script>
 <script src="/frontend/js/app.js"></script>
 {{end}}

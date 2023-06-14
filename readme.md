@@ -1,5 +1,5 @@
 # My wireshark clone
-dockerfile and docker-compose coming soon to self-host
+dockerfile and docker-compose coming soon to self-host in a single binary
 
 Note: Change app.InProduction to true when in production
 
@@ -9,7 +9,7 @@ Note: Change app.InProduction to true when in production
 - Backend:
   - Built in Go version 1.20
   - Uses the [chi router](github.com/go-chi/chi)
-  - Contains embedded database for persisting logic
+  - Uses Redis Database
 
 
 ### To-Do
@@ -19,4 +19,5 @@ Note: Change app.InProduction to true when in production
 - [x] Packet Dump more organized when shown
 - [ ] Be able to choose location of pcap save and choose file format of save
 - [x] Open pcap files
+- [x] Better Data Persistance with addition of database
 
