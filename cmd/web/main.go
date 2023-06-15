@@ -14,7 +14,6 @@ import (
 var portNumber = ":8080"
 var app config.AppConfig
 
-// main is the main function
 func main() {
 	// change this to true when in production
 	app.InProduction = true

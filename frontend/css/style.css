@@ -163,3 +163,13 @@ select option:not(:checked) {
   top: 1rem;
   left: 20rem;
 }
+#protocols {
+  position: relative;
+  top: 2rem;
+  left: 39%;
+}
+.interfaceSelection {
+  position: relative;
+  top: -1rem;
+  left: 39%;
+}

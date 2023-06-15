@@ -115,7 +115,7 @@ function stopProgram() {
         });
 }
 stopButton.addEventListener('click', function () {
-    stopProgram()
+    stopProgram()    
 });
 function removeAllRows() {
     var rowCount = packetTable.rows.length;
@@ -290,7 +290,6 @@ function beutficalDisplay(packetData) {
 }
 
 //Saving
-//Saving and Uploading pcap files
 function showFileDialog(checked) {
     if (checked) {
         var fullPath = prompt("Choose a directory to save the file, including the file name:");

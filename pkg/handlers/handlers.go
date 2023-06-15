@@ -154,8 +154,9 @@ func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	neededpacketNumber := r.URL.Query().Get("packetnumber")
 	if neededpacketNumber == "clear" {
-		redis.InitRedisConnection()
-		redis.ClearPackets()
+		redis.ClearPackets("packet")
+		redis.ClearPackets("packetsFromFile")
+		*packetNumber = 1
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -199,7 +200,7 @@ func (m *Repository) SettingsSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Repository) Upload(w http.ResponseWriter, r *http.Request) {
-	file, handler, err := r.FormFile("file")
+	file, _, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, "Failed to retrieve uploaded file", http.StatusBadRequest)
 		return
@@ -227,33 +228,37 @@ func (m *Repository) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer handle.Close()
 	packet.ListenPacketsFromFile(handle, packetInfo, MessageChan)
-
 	// Delete the temporary file after processing
 	os.Remove(tempFile.Name())
 
-	fmt.Printf("Uploaded file parsed successfully:%s\n", handler.Filename)
 	w.WriteHeader(http.StatusOK)
 }
 
-func (m *Repository) Recover(w http.ResponseWriter, r *http.Request) {
-	redis.InitRedisConnection()
-	packets, err := redis.RecoverPackets()
-	if err != nil {
-		fmt.Println("Error recovering packets from redis function")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if len(packets) == 0 {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("[]"))
-		return
-	}
-	*packetNumber = len(packets) + 1
-	packetsJSON, err := json.Marshal(packets)
-	if err != nil {
-		fmt.Println("Error marshalling recovered packets:",err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+func (m *Repository) Retrieve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(packetsJSON)
+	get := r.URL.Query().Get("get")
+	if get == "recover" {
+		packets, err := redis.RecoverPackets("packet")
+		if err != nil {
+			fmt.Println("Error recovering packets from redis function")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		} else if len(packets) == 0 {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("[]"))
+			return
+		}
+		*packetNumber = len(packets) + 1
+		packetsJSON, err := json.Marshal(packets)
+		if err != nil {
+			fmt.Println("Error marshalling recovered packets:", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Write(packetsJSON)
+	} else if get == "filecontents" {
+		packets, _ := redis.RecoverPackets("packetsFromFile")
+		packetsJSON, _ := json.Marshal(packets)
+		w.Write([]byte(packetsJSON))
+	}
 }

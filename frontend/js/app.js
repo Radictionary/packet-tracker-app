@@ -83,7 +83,7 @@ function appendingTable(data) {
 
         row.addEventListener('click', () => {
             let packetNumberSelected = packetNumber.innerText;
-            fetch(`/packetinfo?packetnumber=${packetNumberSelected}`)
+            fetch(`packetsearch?packetnumber=${packetNumberSelected}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error("Could not get packet information");
@@ -110,7 +110,7 @@ function appendingTable(data) {
 }
 
 
-fetch("/recover")
+fetch("/retrieve?get=recover")
     .then(response => response.json())
     .then(data => {
         let recoverdPacketsNum = data.length
@@ -153,7 +153,7 @@ fetch("/recover")
 
                 });
             });
-            statusMessage.innerText = "Recovered " + recoverdPacketsNum + " unsaved packets";
+            statusMessage.innerText = "Recovered " + (recoverdPacketsNum) + " unsaved packets";
         }
         setTimeout(function () {
             statusMessage.innerText = "Waiting for start"
@@ -195,7 +195,7 @@ function settingsSync() {
         })
         .catch(error => {
             statusMessage.innerText = "Couldn't retrieve user settings";
-            console.log(error)
+            console.Error(error)
         });
 }
 
@@ -215,6 +215,61 @@ function uploadFile(file) {
             if (!response.ok) {
                 statusMessage.innerText = "Failed to upload file"
                 console.error('Failed to upload file:', response.statusText);
+            } else {
+                statusMessage.innerText = "Retrieving file contents..."
+                fetch("/retrieve?get=filecontents")
+                    .then(response => response.json())
+                    .then(data => {
+                        let filePacketsNum = data.length
+                        if (data.length === 0) {
+                            statusMessage.innerText = "No packets retrieved from file"
+                        } else {
+                            data.forEach(packet => {
+                                const file_row = tableBody.insertRow();
+                                const file_interface = file_row.insertCell();
+                                const file_protocol = file_row.insertCell();
+                                const file_length = file_row.insertCell();
+                                const file_srcAddr = file_row.insertCell();
+                                const file_dstnAddr = file_row.insertCell();
+                                const file_packetNumber = file_row.insertCell();
+                                const file_timeCell = file_row.insertCell();
+                                file_interface.innerText = packet.interface;
+                                file_protocol.innerText = packet.protocol;
+                                file_srcAddr.innerText = packet.srcAddr;
+                                file_dstnAddr.innerText = packet.dstnAddr;
+                                if (lengthState) { file_length.innerText = packet.length; }
+                                file_packetNumber.innerText = packet.packetNumber;
+                                file_timeCell.innerText = packet.time;
+                                file_row.addEventListener('click', () => {
+                                    let packetNumberSelected = file_packetNumber.innerText;
+                                    fetch(`/packetinfo?packetnumber=${packetNumberSelected}`)
+                                        .then(response => {
+                                            if (!response.ok) {
+                                                throw new Error("Could not get packet information");
+                                            }
+                                            return response.json();
+                                        })
+                                        .then(data => {
+                                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump);
+
+                                        })
+                                        .catch(error => {
+                                            statusMessage.innerText = "Couldn't retrieve information about the packet";
+                                            console.error(error);
+                                        });
+
+                                });
+                            });
+                            statusMessage.innerText = "Retrieved " + (filePacketsNum) + " from file";
+                        }
+                        setTimeout(function () {
+                            statusMessage.innerText = "Waiting for start"
+                        }, 850)
+                    })
+                    .catch(error => {
+                        statusMessage.innerText = "Failed to recover packets";
+                        console.error(error);
+                    });
             }
         })
         .catch(function (error) {

@@ -8,8 +8,8 @@
 </div>
 <section class="controls">
   <form id="controls" enctype="multipart/form-data">
-    <label>Interface:</label>
-    <input id="interfaceInput" name="interface" type="text" value="" />
+    <label class="interfaceSelection">Interface:</label>
+    <input id="interfaceInput" class="interfaceSelection" name="interface" type="text" value="" />
     <select name="filter" id="protocols" multiple>
       <option value="none">none</option>
       <option value="tcp">tcp</option>
@@ -27,12 +27,12 @@
     </div>
   </form>
   <div class="mainControls">
-  <button id="start">start</button>
-  <button id="stop">stop</button>
-  <button id="clear">clear</button>
-  <button id="save">save</button>
-  <input type="file" id="fileInput" style="display: none;" />
-  <button id="pcapUpload">Open from File</button>
+    <button id="start">start</button>
+    <button id="stop">stop</button>
+    <button id="clear">clear</button>
+    <button id="save">save</button>
+    <input type="file" id="fileInput" style="display: none;" />
+    <button id="pcapUpload">Open from File</button>
   </div>
   <h3>Status: <span id="status">Recovering unsaved packets...</span></h3>
   <h3 class="customizations">Customization: <span id="customization"></span></h3>
@@ -41,22 +41,22 @@
 
 
 <div class="table-container">
-<table id="packetTable" class="packetTable">
-  <thead
-    style="position: sticky; z-index: 999; top: -0.01rem; background-color: rgb(17, 205, 234); border-radius: 5rem; opacity: 0.95;">
-    <tr>
-      <th>Interface</th>
-      <th>Protocol</th>
-      <th id="lengthRow">Length</th>
-      <th>Source</th>
-      <th>Destination</th>
-      <th>Packet #</th>
-      <th>Time</th>
-    </tr>
-  </thead>
-  <tbody id="table-body">
-  </tbody>
-</table>
+  <table id="packetTable" class="packetTable">
+    <thead
+      style="position: sticky; z-index: 999; top: -0.01rem; background-color: rgb(17, 205, 234); border-radius: 5rem; opacity: 0.95;">
+      <tr>
+        <th>Interface</th>
+        <th>Protocol</th>
+        <th id="lengthRow">Length</th>
+        <th>Source</th>
+        <th>Destination</th>
+        <th>Packet #</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+    </tbody>
+  </table>
 </div>
 
 <div id="popupContainer">

@@ -171,7 +171,7 @@ func ListenPackets(packetStruct models.PacketStruct, packetNumber *int, stop cha
 				packetStruct.Saved = false
 			}
 			MessageChan <- packetStruct
-			redis.HashStruct(packetStruct)
+			redis.HashStruct(packetStruct, "packet")
 			*packetNumber++
 		}
 	}
@@ -191,15 +191,14 @@ func ListenPacketsFromFile(handle *pcap.Handle, packetStruct models.PacketStruct
 		packetStruct.Length = Singlepacket.Metadata().Length
 		packetStruct.PacketDump = Singlepacket.Dump()
 		packetStruct.Saved = true
-		MessageChan <- packetStruct
-		redis.HashStruct(packetStruct)
+		redis.HashStruct(packetStruct, "packetsFromFile")
 		openedPacketsfromFile++
 	}
 }
 
 func SavePackets(file_save string) {
 	redis.InitRedisConnection()
-	packets, err := redis.RecoverPackets()
+	packets, err := redis.RecoverPackets("packet")
 	if err != nil {
 		fmt.Println("Error recovering packets from redis function:", err)
 		return
@@ -216,8 +215,7 @@ func SavePackets(file_save string) {
 	pcapWriter := pcapgo.NewWriter(pcapFile)
 	config.Handle(err, "Creating pcap writer", false)
 
-	// Set the snapshot length and link type
-	snaplen := 65535 // Maximum packet length to capture
+	snaplen := 65535
 	linkType := layers.LinkTypeEthernet
 
 	// Write pcap file headers
