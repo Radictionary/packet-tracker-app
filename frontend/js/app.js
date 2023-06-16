@@ -91,13 +91,12 @@ function appendingTable(data) {
                     return response.json();
                 })
                 .then(data => {
-                    showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump);
+                    showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.dns_domainName, data.dns_hostInformation);
                 })
                 .catch(error => {
                     statusMessage.innerText = "Couldn't retrieve information about the packet";
                     console.error(error);
                 });
-
         });
         if (scrollDown) {
             window.scrollBy({
@@ -135,7 +134,7 @@ fetch("/retrieve?get=recover")
                 recov_timeCell.innerText = packet.time;
                 recov_row.addEventListener('click', () => {
                     let packetNumberSelected = recov_packetNumber.innerText;
-                    fetch(`/packetinfo?packetnumber=${packetNumberSelected}`)
+                    fetch(`/packetsearch?packetnumber=${packetNumberSelected}`)
                         .then(response => {
                             if (!response.ok) {
                                 throw new Error("Could not get packet information");
@@ -143,8 +142,7 @@ fetch("/retrieve?get=recover")
                             return response.json();
                         })
                         .then(data => {
-                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump);
-
+                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.typeA);
                         })
                         .catch(error => {
                             statusMessage.innerText = "Couldn't retrieve information about the packet";
@@ -206,6 +204,7 @@ selectFilterField.addEventListener("blur", function () {
 function uploadFile(file) {
     var formData = new FormData();
     formData.append('file', file);
+    statusMessage.innerText = "Reading File..."
 
     fetch('/upload', {
         method: 'POST',
@@ -250,8 +249,7 @@ function uploadFile(file) {
                                             return response.json();
                                         })
                                         .then(data => {
-                                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump);
-
+                                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.typeA);
                                         })
                                         .catch(error => {
                                             statusMessage.innerText = "Couldn't retrieve information about the packet";

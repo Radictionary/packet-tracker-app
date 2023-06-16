@@ -17,7 +17,8 @@ Note: Change app.InProduction to true when in production
 - [x] More visual customization options
 - [x] Save current packets in a pcap file
 - [x] Packet Dump more organized when shown
-- [ ] Be able to choose location of pcap save and choose file format of save
+- [ ] Be able to choose location of pcap save and choose file format of saving packet capture
 - [x] Open pcap files
 - [x] Better Data Persistance with addition of database
+- [x] DNS packet optimization and display of DNS query and more information
 

@@ -52,17 +52,17 @@ func RetrieveData(key string) (string, error) {
 }
 func HashStruct(packet models.PacketStruct, identifier string) error {
 	redisFields := map[string]interface{}{
-		"Interface":    packet.Interface,
-		"Protocol":     packet.Protocol,
-		"SrcAddr":      packet.SrcAddr,
-		"DstnAddr":     packet.DstnAddr,
-		"Length":       packet.Length,
-		"PacketNumber": packet.PacketNumber,
-		"PacketDump":   packet.PacketDump,
-		"PacketData":   packet.PacketData,
-		"Time":         packet.Time,
-		"Err":          packet.Err,
-		"Saved":        packet.Saved,
+		"interface":    packet.Interface,
+		"protocol":     packet.Protocol,
+		"srcAddr":      packet.SrcAddr,
+		"dstnAddr":     packet.DstnAddr,
+		"length":       packet.Length,
+		"packetNumber": packet.PacketNumber,
+		"packetDump":   packet.PacketDump,
+		"packetData":   packet.PacketData,
+		"time":         packet.Time,
+		"err":          packet.Err,
+		"saved":        packet.Saved,
 	}
 
 	key := fmt.Sprintf("%v:%d", identifier, packet.PacketNumber)
@@ -74,6 +74,14 @@ func HashStruct(packet models.PacketStruct, identifier string) error {
 	return nil
 }
 
+func RetrieveMap(key string) (map[string]string, error) {
+	result, err := rdb.HGetAll(context.Background(), key).Result()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func RetrieveStruct(key string) (models.PacketStruct, error) {
 	result, err := rdb.HGetAll(context.Background(), key).Result()
 	if err != nil {
@@ -81,17 +89,17 @@ func RetrieveStruct(key string) (models.PacketStruct, error) {
 	}
 
 	packet := models.PacketStruct{
-		Interface:    result["Interface"],
-		Protocol:     result["Protocol"],
-		SrcAddr:      result["SrcAddr"],
-		DstnAddr:     result["DstnAddr"],
-		Length:       convertStringToInt(result["Length"]),
-		PacketNumber: convertStringToInt(result["PacketNumber"]),
-		PacketDump:   result["PacketDump"],
-		PacketData:   []byte((result["PacketData"])),
-		Time:         result["Time"],
-		Err:          result["Err"],
-		Saved:        convertStringToBool(result["Saved"]),
+		Interface:    result["interface"],
+		Protocol:     result["protocol"],
+		SrcAddr:      result["srcAddr"],
+		DstnAddr:     result["dstnAddr"],
+		Length:       convertStringToInt(result["length"]),
+		PacketNumber: convertStringToInt(result["packetNumber"]),
+		PacketDump:   result["packetDump"],
+		PacketData:   []byte((result["packetData"])),
+		Time:         result["time"],
+		Err:          result["err"],
+		Saved:        convertStringToBool(result["saved"]),
 	}
 
 	return packet, nil
@@ -118,12 +126,63 @@ func MarkAsSaved() error {
 	return nil
 }
 
+func RecoverPackets(identifier string) ([]models.PacketStruct, error) {
+	iter := rdb.Scan(context.Background(), 0, identifier+":*", 0).Iterator()
+
+	var packets []models.PacketStruct
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+
+	for iter.Next(context.Background()) {
+		packetNumberKey := iter.Val()
+
+		wg.Add(1)
+		go func(key string) {
+			defer wg.Done()
+			packetData, err := rdb.HGetAll(context.Background(), key).Result()
+			if err != nil {
+				return
+			}
+			if convertStringToBool(packetData["saved"]) && packetData["interface"] != "N/A" {
+				return
+			}
+			packet := models.PacketStruct{
+				Interface:    packetData["interface"],
+				Protocol:     packetData["protocol"],
+				SrcAddr:      packetData["srcAddr"],
+				DstnAddr:     packetData["dstnAddr"],
+				Length:       convertStringToInt(packetData["length"]),
+				PacketNumber: convertStringToInt(packetData["packetNumber"]),
+				PacketDump:   packetData["packetDump"],
+				PacketData:   []byte(packetData["packetData"]),
+				Time:         packetData["time"],
+				Err:          packetData["err"],
+				Saved:        convertStringToBool(packetData["saved"]),
+			}
+			mutex.Lock()
+			packets = append(packets, packet)
+			mutex.Unlock()
+		}(packetNumberKey)
+	}
+	wg.Wait()
+
+	if err := iter.Err(); err != nil {
+		return nil, err
+	}
+
+	// Sort packets by packet number
+	sort.SliceStable(packets, func(i, j int) bool {
+		return packets[i].PacketNumber < packets[j].PacketNumber
+	})
+	return packets, nil
+}
+
 
 func ClearPackets(identifier string) error {
 	cursor := uint64(0)
 	var batchSize int64 = 1000
 	for {
-		keys, nextCursor, err := rdb.Scan(context.Background(), cursor, identifier + ":*", batchSize).Result()
+		keys, nextCursor, err := rdb.Scan(context.Background(), cursor, identifier+":*", batchSize).Result()
 		if err != nil {
 			return err
 		}
@@ -158,50 +217,4 @@ func convertStringToBool(s string) bool {
 		fmt.Println("Error converting string to bool:", err)
 	}
 	return i
-}
-
-func RecoverPackets(identifier string) ([]models.PacketStruct, error) {
-	iter := rdb.Scan(context.Background(), 0, identifier+":*", 0).Iterator()
-
-	var packets []models.PacketStruct
-
-	for iter.Next(context.Background()) {
-		packetNumberKey := iter.Val() // Retrieve the key
-
-		// Use HGETALL to fetch the hash data for the key
-		packetData, err := rdb.HGetAll(context.Background(), packetNumberKey).Result()
-		if err != nil {
-			return nil, err
-		}
-		if convertStringToBool(packetData["Saved"]) && packetData["Interface"] != "N/A" {
-			continue
-		}
-		// Create a new PacketStruct and populate it with the retrieved data
-		packet := models.PacketStruct{
-		Interface:    packetData["Interface"],
-		Protocol:     packetData["Protocol"],
-		SrcAddr:      packetData["SrcAddr"],
-		DstnAddr:     packetData["DstnAddr"],
-		Length:       convertStringToInt(packetData["Length"]),
-		PacketNumber: convertStringToInt(packetData["PacketNumber"]),
-		PacketDump:   packetData["PacketDump"],
-		PacketData:   []byte((packetData["PacketData"])),
-		Time:         packetData["Time"],
-		Err:          packetData["Err"],
-		Saved:        convertStringToBool(packetData["Saved"]),
-	}
-
-		packets = append(packets, packet)
-	}
-
-	if err := iter.Err(); err != nil {
-		return nil, err
-	}
-
-	// Sort packets by packet number
-	sort.SliceStable(packets, func(i, j int) bool {
-		return packets[i].PacketNumber < packets[j].PacketNumber
-	})
-
-	return packets, nil
 }

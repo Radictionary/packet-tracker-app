@@ -23,7 +23,9 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/testify v1.7.0 // indirect
 	go.opencensus.io v0.22.5 // indirect
+	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/tools v0.3.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 )
 
@@ -31,5 +33,6 @@ require (
 	github.com/dgraph-io/badger/v4 v4.1.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/joho/godotenv v1.5.1
+	github.com/miekg/dns v1.1.54
 	golang.org/x/sys v0.8.0 // indirect
 )

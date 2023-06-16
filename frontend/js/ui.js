@@ -126,7 +126,7 @@ function removeAllRows() {
 }
 clearButton.addEventListener("click", function () {
     removeAllRows()
-    fetch(`/packetinfo?packetnumber=clear`)
+    fetch(`/packetsearch?packetnumber=clear`)
         .then(response => {
             if (response.ok) {
                 statusMessage.innerText = "Cleared"
@@ -170,10 +170,9 @@ const closeButton = document.getElementById('close');
 const popupContainer = document.getElementById('popupContainer');
 const popupBox = document.getElementById('popupBox');
 const dragHandle = document.getElementById('dragHandle');
-const packetDumpOutput = document.getElementById('packetDumpOutput');
 popupContainer.style.height = '0';
 popupBox.style.height = '0';
-function showPopupBox(number, type, length, saved, data) {
+function showPopupBox(number, type, length, saved, data, dnsHostName, dnsInformation) {
     var startY, startHeight;
     // Show the popup box
     popupContainer.style.height = 'auto';
@@ -181,10 +180,20 @@ function showPopupBox(number, type, length, saved, data) {
     popupBox.style.visibility = 'visible'
 
     // Set the packet number and data
+    if (saved == 1) {
+        saved = "true"
+    } else {
+        saved = "false"
+    }
     document.getElementById("packetNumber").innerText = number
     document.getElementById("packetType").innerText = type
     document.getElementById("packetLength").innerText = length
     document.getElementById("packetSaved").innerText = saved
+    if (dnsHostName != null) {
+        document.getElementById("details").style.visibility = "visible"
+        document.getElementById("packetDnsResults").innerText = dnsHostName
+        document.getElementById("packetDnsInformation").innerText = dnsInformation
+    }
     beutficalDisplay(data)
     // Make the box resizable
     dragHandle.addEventListener('mousedown', startDrag, false);
@@ -207,6 +216,7 @@ function showPopupBox(number, type, length, saved, data) {
         popupContainer.style.height = '0';
         popupBox.style.height = '0';
         popupBox.style.visibility = 'hidden';
+        document.getElementById("details").style.visibility = "hidden"
     })
 }
 
@@ -280,11 +290,9 @@ function beutficalDisplay(packetData) {
         return html;
     }
 
-    // Parse packet data and generate dropdowns
     const parsedPacketData = parsePacketData(packetData);
     const dropdownsHTML = generateDropdowns(parsedPacketData);
 
-    // Display the dropdowns on the page
     const container = document.getElementById('packet-container');
     container.innerHTML = dropdownsHTML;
 }

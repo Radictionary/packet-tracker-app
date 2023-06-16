@@ -21,7 +21,7 @@
       <input type="checkbox" name="includeLength" id="includeLength" checked>
     </div>
     <div class="saveMethod">
-      <label for="save_method">Save captured packets</label>
+      <label for="save_method">Listen packets to a save file</label>
       <input type="checkbox" name="save_method" id="save_method" onchange="showFileDialog(this.checked)" />
       <br><label id="savingToFileNotification"></label>
     </div>
@@ -68,10 +68,27 @@
       <h3 class="packetTypeContainer">Type:<span id="packetType"></span></h3>
       <h3 class="packetLengthContainer">Length:<span id="packetLength"></span> bytes</h3>
       <h3 class="packetSavedContainer">Saved:<span id="packetSaved"></span></h3>
+      <details>
+        <summary id="details" style="visibility: hidden;">View DNS information</summary>
+        <div style="display: flex; justify-content: center; padding: 2rem;">
+          <div style="text-align: center;">
+            <span>Host:</span>
+            <h4 id="packetDnsResults"></h4>
+          </div>
+          <div style="text-align: center;">
+            <span>Host DNS information:</span>
+            <h4 id="packetDnsInformation"></h4>
+          </div>
+        </div>
+      </details>
+
+
       <br>
-      <div id="packet-container"></div>
       <br>
-      <h4 id="packetDumpOutput"></h4>
+      <details>
+        <summary>Packet Data</summary>
+        <div id="packet-container"></div>
+      </details>
     </div>
   </div>
 </div>

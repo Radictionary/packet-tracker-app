@@ -173,3 +173,7 @@ select option:not(:checked) {
   top: -1rem;
   left: 39%;
 }
+
+#packetDnsResults {
+  font-size: 1rem;
+}

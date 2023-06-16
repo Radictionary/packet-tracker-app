@@ -154,17 +154,27 @@ func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	neededpacketNumber := r.URL.Query().Get("packetnumber")
 	if neededpacketNumber == "clear" {
+		*packetNumber = 1
 		redis.ClearPackets("packet")
 		redis.ClearPackets("packetsFromFile")
-		*packetNumber = 1
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	result, err := redis.RetrieveStruct("packet:" + neededpacketNumber)
+	result, err := redis.RetrieveMap("packet:" + neededpacketNumber)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Println("Error retrieving packet from redis in json format:", err)
 		return
+	}
+	if result["protocol"] == "DNS" {
+		dnsPacket := packet.ProcessDnsPacket([]byte(result["packetData"]))
+		if len(dnsPacket.Questions) > 0 {
+			question := dnsPacket.Questions[0]
+			result["dns_domainName"] = string(question.Name)
+		}
+		dnsHostInformation, err := packet.DnsInformation(result["dns_domainName"])
+		config.Handle(err, "Getting dns host information", false)
+		result["dns_hostInformation"] = dnsHostInformation.String()
 	}
 	packetStruct, err := json.Marshal(result)
 	config.Handle(err, "Json Marshaling PacketStruct", false)
@@ -212,14 +222,12 @@ func (m *Repository) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tempFile.Close()
-
 	// Copy the uploaded file to the temporary file
 	_, err = io.Copy(tempFile, file)
 	if err != nil {
 		http.Error(w, "Failed to save uploaded file", http.StatusInternalServerError)
 		return
 	}
-
 	// Open the temporary file as a pcap packet source
 	handle, err := pcap.OpenOffline(tempFile.Name())
 	if err != nil {

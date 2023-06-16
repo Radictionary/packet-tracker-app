@@ -16,7 +16,7 @@ var app config.AppConfig
 
 func main() {
 	// change this to true when in production
-	app.InProduction = true
+	app.InProduction = false
 
 	tc, err := render.CreateTemplateCache()
 	if err != nil {
