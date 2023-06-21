@@ -6,15 +6,17 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
-	"github.com/Radictionary/website/models"
-	"github.com/Radictionary/website/packet"
-	"github.com/Radictionary/website/pkg/config"
-	"github.com/Radictionary/website/pkg/render"
-	"github.com/Radictionary/website/pkg/template_models"
-	"github.com/Radictionary/website/redis"
-	"github.com/Radictionary/website/sse"
+	"github.com/Radictionary/packy/models"
+	"github.com/Radictionary/packy/packet"
+	"github.com/Radictionary/packy/pkg/config"
+	"github.com/Radictionary/packy/pkg/render"
+	"github.com/Radictionary/packy/pkg/template_models"
+	"github.com/Radictionary/packy/redis"
+	"github.com/Radictionary/packy/sse"
 
 	"github.com/google/gopacket/pcap"
 )
@@ -153,28 +155,62 @@ func (m *Repository) Change(w http.ResponseWriter, r *http.Request) {
 func (m *Repository) SearchPacket(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	neededpacketNumber := r.URL.Query().Get("packetnumber")
-	if neededpacketNumber == "clear" {
-		*packetNumber = 1
-		redis.ClearPackets("packet")
-		redis.ClearPackets("packetsFromFile")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	result, err := redis.RetrieveMap("packet:" + neededpacketNumber)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Println("Error retrieving packet from redis in json format:", err)
-		return
-	}
-	if result["protocol"] == "DNS" {
-		dnsPacket := packet.ProcessDnsPacket([]byte(result["packetData"]))
-		if len(dnsPacket.Questions) > 0 {
-			question := dnsPacket.Questions[0]
-			result["dns_domainName"] = string(question.Name)
+	var result map[string]string
+	var err error
+	if neededpacketNumber != "" {
+		if neededpacketNumber == "clear" {
+			*packetNumber = 1
+			redis.ClearPackets("packet")
+			redis.ClearPackets("packetsFromFile")
+			w.WriteHeader(http.StatusOK)
+			return
 		}
-		dnsHostInformation, err := packet.DnsInformation(result["dns_domainName"])
-		config.Handle(err, "Getting dns host information", false)
-		result["dns_hostInformation"] = dnsHostInformation.String()
+
+		result, err = redis.RetrieveMap("packet:" + neededpacketNumber)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Println("Error retrieving packet from redis in json format:", err)
+			return
+		}
+		if result["protocol"] == "DNS" {
+			dnsPacket := packet.ProcessDnsPacket([]byte(result["packetData"]))
+			if len(dnsPacket.Questions) > 0 {
+				question := dnsPacket.Questions[0]
+				result["dns_domainName"] = string(question.Name)
+			}
+			dnsHostInformation, err := packet.DnsInformation(result["dns_domainName"])
+			config.Handle(err, "Getting dns host information", false)
+			result["dns_hostInformation"] = dnsHostInformation.String()
+		}
+	} else {
+		neededpacketNumber := r.URL.Query().Get("packetnumberfromfile")
+		if neededpacketNumber != "" {
+			if neededpacketNumber == "clear" {
+				*packetNumber = 1
+				redis.ClearPackets("packet")
+				redis.ClearPackets("packetsFromFile")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			result, err = redis.RetrieveMap("packetsFromFile:" + neededpacketNumber)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Println("Error retrieving packet from redis in json format:", err)
+				return
+			}
+			if result["protocol"] == "DNS" {
+				dnsPacket := packet.ProcessDnsPacket([]byte(result["packetData"]))
+				if len(dnsPacket.Questions) > 0 {
+					question := dnsPacket.Questions[0]
+					result["dns_domainName"] = string(question.Name)
+				}
+				dnsHostInformation, err := packet.DnsInformation(result["dns_domainName"])
+				config.Handle(err, "Getting dns host information", false)
+				result["dns_hostInformation"] = dnsHostInformation.String()
+			}
+		}
+
 	}
 	packetStruct, err := json.Marshal(result)
 	config.Handle(err, "Json Marshaling PacketStruct", false)
@@ -235,7 +271,7 @@ func (m *Repository) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer handle.Close()
-	packet.ListenPacketsFromFile(handle, packetInfo, MessageChan)
+	packet.ListenPacketsFromFile(handle, packetInfo)
 	// Delete the temporary file after processing
 	os.Remove(tempFile.Name())
 
@@ -246,7 +282,7 @@ func (m *Repository) Retrieve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	get := r.URL.Query().Get("get")
 	if get == "recover" {
-		packets, err := redis.RecoverPackets("packet")
+		packets, err := redis.RecoverPackets("packet", MessageChan)
 		if err != nil {
 			fmt.Println("Error recovering packets from redis function")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -265,8 +301,35 @@ func (m *Repository) Retrieve(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write(packetsJSON)
 	} else if get == "filecontents" {
-		packets, _ := redis.RecoverPackets("packetsFromFile")
-		packetsJSON, _ := json.Marshal(packets)
+		packets, err := redis.RecoverPackets("packetsFromFile", MessageChan)
+		if err != nil {
+			fmt.Println("Error recovering packets from redis function")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		packetsJSON, err := json.Marshal(packets)
+		if err != nil {
+			fmt.Println("Error marshalling recovered packets:", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.Write([]byte(packetsJSON))
+	}
+}
+
+func (m *Repository) StartTimer(w http.ResponseWriter, r *http.Request) {
+	timeLengthString := r.URL.Query().Get("time")
+	if timeLengthString != "" {
+		timeLength, err := strconv.Atoi(timeLengthString)
+		timer := time.NewTimer(time.Minute * time.Duration(timeLength))
+		config.Handle(err, "Error converting timelengthstring to int", false)
+		go packet.ListenPackets(packetInfo, packetNumber, stop, MessageChan)
+		go func() {
+			<-timer.C
+			stop <- struct{}{}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("timer_ran_out"))
+			fmt.Println("Timer ran out")
+		}()
 	}
 }

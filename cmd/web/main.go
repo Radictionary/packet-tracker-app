@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Radictionary/website/pkg/config"
-	"github.com/Radictionary/website/pkg/handlers"
-	"github.com/Radictionary/website/pkg/render"
+	"github.com/Radictionary/packy/pkg/config"
+	"github.com/Radictionary/packy/pkg/handlers"
+	"github.com/Radictionary/packy/pkg/render"
 )
 
-var portNumber = ":8080"
+var portNumber = ":8085"
 var app config.AppConfig
 
 func main() {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Radictionary/website/models"
-	"github.com/Radictionary/website/pkg/config"
-	"github.com/Radictionary/website/redis"
+	"github.com/Radictionary/packy/models"
+	"github.com/Radictionary/packy/pkg/config"
+	"github.com/Radictionary/packy/redis"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -21,57 +21,59 @@ import (
 func DetectProtocol(packet gopacket.Packet) (string, string, string) {
 	var protocol, sourceAddress, destAddress string
 
-	if transport := packet.TransportLayer(); transport != nil {
-		switch transport.LayerType() {
-		case layers.LayerTypeTCP:
-			protocol = "TCP"
-			tcp, _ := transport.(*layers.TCP)
-			sourceAddress = packet.NetworkLayer().NetworkFlow().Src().String()
-			destAddress = packet.NetworkLayer().NetworkFlow().Dst().String()
-			if tcp.DstPort == 80 || tcp.SrcPort == 80 {
-				protocol = "HTTP"
-			}
-			if tcp.DstPort == 443 || tcp.SrcPort == 443 {
-				protocol = "HTTPS"
-			}
-		case layers.LayerTypeUDP:
-			protocol = "UDP"
-			udp, _ := transport.(*layers.UDP)
-			sourceAddress = packet.NetworkLayer().NetworkFlow().Src().String()
-			destAddress = packet.NetworkLayer().NetworkFlow().Dst().String()
+	network := packet.NetworkLayer()
+	if network != nil {
+		switch network.LayerType() {
+		case layers.LayerTypeIPv4:
+			protocol = "IPv4"
+			ipv4, _ := network.(*layers.IPv4)
+			sourceAddress = ipv4.SrcIP.String()
+			destAddress = ipv4.DstIP.String()
 
-			// Check for DNS packets
-			if udp.DstPort == 53 || udp.SrcPort == 53 {
-				protocol = "DNS"
+			transport := packet.TransportLayer()
+			if transport != nil && transport.LayerType() == layers.LayerTypeUDP {
+				udp, _ := transport.(*layers.UDP)
+				dnsLayer := packet.Layer(layers.LayerTypeDNS)
+				if dnsLayer != nil {
+					protocol = "DNS"
+				} else {
+					if udp.DstPort == 53 || udp.SrcPort == 53 {
+						protocol = "DNS"
+					} else {
+						protocol = "UDP"
+					}
+				}
+			}
+		case layers.LayerTypeIPv6:
+			protocol = "IPv6"
+			ipv6, _ := network.(*layers.IPv6)
+			sourceAddress = ipv6.SrcIP.String()
+			destAddress = ipv6.DstIP.String()
+
+			transport := packet.TransportLayer()
+			if transport != nil && transport.LayerType() == layers.LayerTypeUDP {
+				udp, _ := transport.(*layers.UDP)
+				dnsLayer := packet.Layer(layers.LayerTypeDNS)
+				if dnsLayer != nil {
+					protocol = "DNS"
+				} else {
+					if udp.DstPort == 53 || udp.SrcPort == 53 {
+						protocol = "DNS"
+					} else {
+						protocol = "UDP"
+					}
+				}
 			}
 		}
 	}
-	if protocol == "" {
-		if network := packet.NetworkLayer(); network != nil {
-			switch network.LayerType() {
-			case layers.LayerTypeIPv4:
-				protocol = "IPv4"
-				ipv4, _ := network.(*layers.IPv4)
-				sourceAddress = ipv4.SrcIP.String()
-				destAddress = ipv4.DstIP.String()
-			case layers.LayerTypeIPv6:
-				protocol = "IPv6"
-				ipv6, _ := network.(*layers.IPv6)
-				sourceAddress = ipv6.SrcIP.String()
-				destAddress = ipv6.DstIP.String()
-			case layers.LayerTypeICMPv4:
-				protocol = "ICMPv4"
-			case layers.LayerTypeICMPv6:
-				protocol = "ICMPv6"
-			}
-		}
-	}
+
 	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
 		protocol = "ARP"
 		arpPacket := arpLayer.(*layers.ARP)
 		sourceAddress = net.IP(arpPacket.SourceProtAddress).String()
 		destAddress = net.IP(arpPacket.DstProtAddress).String()
 	}
+
 	if protocol == "" {
 		protocol = "N/A"
 	}
@@ -169,16 +171,16 @@ func ListenPackets(packetStruct models.PacketStruct, packetNumber *int, stop cha
 				packetStruct.Saved = true
 			} else {
 				packetStruct.Saved = false
+				redis.HashStruct(packetStruct, "packet")
 			}
 			MessageChan <- packetStruct
-			redis.HashStruct(packetStruct, "packet")
 			*packetNumber++
 		}
 	}
 }
 
 // ListenPacketsFromFile function handles packets from a pcap file
-func ListenPacketsFromFile(handle *pcap.Handle, packetStruct models.PacketStruct, MessageChan chan models.PacketStruct) {
+func ListenPacketsFromFile(handle *pcap.Handle, packetStruct models.PacketStruct) {
 	var openedPacketsfromFile int = 1
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for Singlepacket := range packetSource.Packets() {
@@ -198,7 +200,7 @@ func ListenPacketsFromFile(handle *pcap.Handle, packetStruct models.PacketStruct
 
 func SavePackets(file_save string) {
 	redis.InitRedisConnection()
-	packets, err := redis.RecoverPackets("packet")
+	packets, err := redis.RecoverPackets("packet", nil)
 	if err != nil {
 		fmt.Println("Error recovering packets from redis function:", err)
 		return
@@ -226,9 +228,9 @@ func SavePackets(file_save string) {
 	for _, packetData := range packets {
 		time, _ := time.Parse(time.RFC1123, packetData.Time)
 		captureInfo := gopacket.CaptureInfo{
-			Timestamp:      time, // Set the packet timestamp if available
-			CaptureLength:  len(packetData.PacketData),
-			Length:         len(packetData.PacketData),
+			Timestamp:     time, // Set the packet timestamp if available
+			CaptureLength: len(packetData.PacketData),
+			Length:        len(packetData.PacketData),
 		}
 		if err := pcapWriter.WritePacket(captureInfo, packetData.PacketData); err != nil {
 			fmt.Println("Error writing packet to file:", err)
@@ -236,4 +238,3 @@ func SavePackets(file_save string) {
 	}
 	redis.MarkAsSaved()
 }
-

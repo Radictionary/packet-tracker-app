@@ -115,7 +115,7 @@ function stopProgram() {
         });
 }
 stopButton.addEventListener('click', function () {
-    stopProgram()    
+    stopProgram()
 });
 function removeAllRows() {
     var rowCount = packetTable.rows.length;
@@ -134,7 +134,7 @@ clearButton.addEventListener("click", function () {
         })
         .catch(error => {
             statusMessage.innerText = "Couldn't Clear";
-            console.error(error)
+            console.error("Coulnd't clear" + error)
         });
     popupContainer.style.height = '0';
     popupBox.style.height = '0';
@@ -150,6 +150,7 @@ saveButton.addEventListener("click", function () {
         },
         body: JSON.stringify(data)
     }
+    statusMessage.innerText = "Saving..."
     fetch("/change", requestOptions)
         .then(response => {
             if (response.ok) {
@@ -172,7 +173,7 @@ const popupBox = document.getElementById('popupBox');
 const dragHandle = document.getElementById('dragHandle');
 popupContainer.style.height = '0';
 popupBox.style.height = '0';
-function showPopupBox(number, type, length, saved, data, dnsHostName, dnsInformation) {
+function showPopupBox(number, type, length, saved, data, dnsInformation) {
     var startY, startHeight;
     // Show the popup box
     popupContainer.style.height = 'auto';
@@ -189,9 +190,8 @@ function showPopupBox(number, type, length, saved, data, dnsHostName, dnsInforma
     document.getElementById("packetType").innerText = type
     document.getElementById("packetLength").innerText = length
     document.getElementById("packetSaved").innerText = saved
-    if (dnsHostName != null) {
+    if (dnsInformation != null) {
         document.getElementById("details").style.visibility = "visible"
-        document.getElementById("packetDnsResults").innerText = dnsHostName
         document.getElementById("packetDnsInformation").innerText = dnsInformation
     }
     beutficalDisplay(data)
@@ -239,8 +239,11 @@ checkbox.addEventListener('change', function () {
 
 function beutficalDisplay(packetData) {
     // Parse packet data into an object with named layers
+    let packetDataLines
     function parsePacketData(packetData) {
-        const packetDataLines = packetData.split('\n');
+        if (packetData != null) {
+            packetDataLines = packetData.split('\n');
+        }
         const packetInfo = {};
         let currentLayer = null;
         let currentContent = '';
@@ -346,3 +349,16 @@ document.getElementById('fileInput').addEventListener('change', function (event)
         uploadFile(file);
     }
 });
+
+
+function startTimer(checked) {
+    if (checked) {
+        document.getElementById("timerSelection").style.visibility = "visible"
+    } else {
+        document.getElementById("timerSelection").style.visibility = "hidden"
+    }
+}
+
+setInterval(() => {
+    tableView.innerText = ""
+}, 5000);

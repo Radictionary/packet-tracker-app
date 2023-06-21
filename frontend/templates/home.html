@@ -1,7 +1,7 @@
 {{template "base" .}}
 {{define "description"}}
 <meta name="description" content="My wireshark clone">
-<title>RadinShark</title>
+<title>Packy</title>
 {{end}}
 
 {{define "content_box"}}
@@ -21,9 +21,22 @@
       <input type="checkbox" name="includeLength" id="includeLength" checked>
     </div>
     <div class="saveMethod">
-      <label for="save_method">Listen packets to a save file</label>
+      <label for="save_method">Start saving packets</label>
       <input type="checkbox" name="save_method" id="save_method" onchange="showFileDialog(this.checked)" />
       <br><label id="savingToFileNotification"></label>
+    </div>
+    <div class="timer">
+      <label for="timer">Timer</label>
+      <input type="checkbox" name="timer" id="timer" onchange="startTimer(this.checked)" />
+      <select name="timerSelection" id="timerSelection" style="visibility: hidden;">
+        <option value="">select time</option>
+        <option value="1">1 min</option>
+        <option value="5">5 min</option>
+        <option value="10">10 min</option>
+        <option value="30">30 min</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hour</option>
+      </select>
     </div>
   </form>
   <div class="mainControls">
@@ -39,11 +52,10 @@
   <h3 id="tableView"></h3>
 </section>
 
-
 <div class="table-container">
   <table id="packetTable" class="packetTable">
     <thead
-      style="position: sticky; z-index: 999; top: -0.01rem; background-color: rgb(17, 205, 234); border-radius: 5rem; opacity: 0.95;">
+      style="position: sticky; z-index: 999; top: -0.1rem; background-color: rgb(17, 205, 234); border-radius: 5rem; opacity: 0.95;">
       <tr>
         <th>Interface</th>
         <th>Protocol</th>
@@ -64,25 +76,18 @@
     <div id="dragHandle"></div>
     <div id="popupContent">
       <button id="close">close</button>
-      <h2>Packet Dump #<span id="packetNumber"></span></h2>
+      <h2>Packet #<span id="packetNumber"></span></h2>
       <h3 class="packetTypeContainer">Type:<span id="packetType"></span></h3>
       <h3 class="packetLengthContainer">Length:<span id="packetLength"></span> bytes</h3>
       <h3 class="packetSavedContainer">Saved:<span id="packetSaved"></span></h3>
       <details>
-        <summary id="details" style="visibility: hidden;">View DNS information</summary>
+        <summary id="details" style="visibility: hidden;">View Host DNS information</summary>
         <div style="display: flex; justify-content: center; padding: 2rem;">
-          <div style="text-align: center;">
-            <span>Host:</span>
-            <h4 id="packetDnsResults"></h4>
-          </div>
-          <div style="text-align: center;">
-            <span>Host DNS information:</span>
+          <div style="text-align: center; padding: 1rem">
             <h4 id="packetDnsInformation"></h4>
           </div>
         </div>
       </details>
-
-
       <br>
       <br>
       <details>

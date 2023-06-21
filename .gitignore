@@ -2,3 +2,4 @@ Dockerfile
 *.pcap
 .env
 archives
+.DS_Store

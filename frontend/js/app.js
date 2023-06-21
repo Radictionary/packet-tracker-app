@@ -3,7 +3,7 @@ startSSE() //start inital connection with server
 //Table
 const tableBody = document.getElementById('table-body');
 const tableContainer = document.querySelector('.table-container');
-const maxRows = 2000;
+const maxRows = 3000;
 const minPacketRate = 10; // Minimum packet rate to process
 let packetRate = 50; // Start with a packet rate of 50 packets per second
 let lastTime = performance.now();
@@ -13,13 +13,14 @@ function startSSE() {
     settingsSync()
     const es = new EventSource("/packet");
     es.addEventListener("error", event => {
-        statusMessage.innerText = "Stopped on an error";
+        statusMessage.innerText = "Stopped on server error";
         console.error(event)
     });
     es.addEventListener('new-packet', (event) => {
         const jsonData = event.data
         const data = JSON.parse(jsonData)
         appendingTable(data)
+        console.log(data)
     })
 }
 
@@ -58,6 +59,15 @@ function appendingTable(data) {
         }
 
         interface.innerText = data.interface;
+        if (data.interface === "recover_packet_number") {
+            if (data.protocol === "packetsFromFile") {
+                statusMessage.innerText = "Retrieving " + data.length + " packets contained in file"
+                return
+            } else if (data.protocol == "unsavedPacket") {
+                statusMessage.innerText = "Recovering " + data.length + " unsaved packets..."
+                return
+            }
+        }
         protocol.innerText = data.protocol;
         srcAddr.innerText = data.srcAddr;
         dstnAddr.innerText = data.dstnAddr;
@@ -75,6 +85,7 @@ function appendingTable(data) {
         tableBody.appendChild(row);
         if (scrollDown) { tableContainer.scrollTop = tableContainer.scrollHeight; }
         if (tableBody.children.length > maxRows) {
+            statusMessage.innerText = "Throttling"
             const excessRows = tableBody.children.length - maxRows;
             for (let i = 0; i < excessRows; i++) {
                 tableBody.removeChild(tableBody.firstChild);
@@ -91,7 +102,7 @@ function appendingTable(data) {
                     return response.json();
                 })
                 .then(data => {
-                    showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.dns_domainName, data.dns_hostInformation);
+                    showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.dns_hostInformation);
                 })
                 .catch(error => {
                     statusMessage.innerText = "Couldn't retrieve information about the packet";
@@ -142,7 +153,7 @@ fetch("/retrieve?get=recover")
                             return response.json();
                         })
                         .then(data => {
-                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.typeA);
+                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.dns_hostInformation);
                         })
                         .catch(error => {
                             statusMessage.innerText = "Couldn't retrieve information about the packet";
@@ -241,7 +252,7 @@ function uploadFile(file) {
                                 file_timeCell.innerText = packet.time;
                                 file_row.addEventListener('click', () => {
                                     let packetNumberSelected = file_packetNumber.innerText;
-                                    fetch(`/packetinfo?packetnumber=${packetNumberSelected}`)
+                                    fetch(`/packetsearch?packetnumberfromfile=${packetNumberSelected}`)
                                         .then(response => {
                                             if (!response.ok) {
                                                 throw new Error("Could not get packet information");
@@ -249,7 +260,7 @@ function uploadFile(file) {
                                             return response.json();
                                         })
                                         .then(data => {
-                                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.typeA);
+                                            showPopupBox(data.packetNumber, data.protocol, data.length, data.saved, data.packetDump, data.dns_hostInformation);
                                         })
                                         .catch(error => {
                                             statusMessage.innerText = "Couldn't retrieve information about the packet";
@@ -274,3 +285,14 @@ function uploadFile(file) {
             console.error('Failed to upload file:', error);
         });
 }
+
+//Timer
+document.getElementById("timerSelection").addEventListener("change", function (event) {
+    statusMessage.innerText = "Timer Set"
+    fetch(`/timer?time=${event.target.value}`)
+        .then(response => {
+            if (response.ok && response === "timer_ran_out") {
+                statusMessage.innerText = "Timer ran out"
+            }
+        })
+})

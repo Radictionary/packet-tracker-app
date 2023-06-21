@@ -43,7 +43,7 @@ h3 {
 }
 
 .packetTable {
-  width: 80%;
+  width: 90%;
   margin: auto auto 2rem auto;
   font-size: 2rem;
 }
@@ -74,7 +74,7 @@ select option:not(:checked) {
 
 .saveMethod {
   position: absolute;
-  top:4rem;
+  top: 4rem;
   left: 0.5rem;
 }
 
@@ -84,7 +84,7 @@ select option:not(:checked) {
 
 #tableView {
   position: absolute;
-  top: 4.6rem;
+  top: 6.5rem;
   left: 0.4rem;
   font-size: 1rem;
   /* top: 0.5rem; */
@@ -96,7 +96,7 @@ select option:not(:checked) {
   width: 100%;
   height: auto;
   z-index: 9999;
-  visibility:hidden;
+  visibility: hidden;
   /* z-index: -1; */
 }
 
@@ -162,6 +162,11 @@ select option:not(:checked) {
   position: absolute;
   top: 1rem;
   left: 20rem;
+}
+.timer {
+  position: absolute;
+  top: 5rem;
+  left: 0.5rem;
 }
 #protocols {
   position: relative;

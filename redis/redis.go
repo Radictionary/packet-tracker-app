@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/Radictionary/website/models"
+	"github.com/Radictionary/packy/models"
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
 )
@@ -23,6 +23,8 @@ func InitRedisConnection() error {
 
 	redisAddr := os.Getenv("REDIS_SERVER_ADDR")
 	redisPassword := os.Getenv("REDIS_SERVER_PASSWORD")
+	// redisAddr := "localhost:6379"
+	// redisPassword := ""
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
 		Password: redisPassword,
@@ -106,7 +108,7 @@ func RetrieveStruct(key string) (models.PacketStruct, error) {
 }
 
 func MarkAsSaved() error {
-	packetsToSave, err := RecoverPackets("packet")
+	packetsToSave, err := RecoverPackets("packet", nil)
 	if err != nil {
 		return err
 	}
@@ -126,9 +128,22 @@ func MarkAsSaved() error {
 	return nil
 }
 
-func RecoverPackets(identifier string) ([]models.PacketStruct, error) {
+func RecoverPackets(identifier string, messageChan chan models.PacketStruct) ([]models.PacketStruct, error) {
 	iter := rdb.Scan(context.Background(), 0, identifier+":*", 0).Iterator()
-
+	go func() {
+		var protocol string
+		packetsToRecover := CountHashesByPattern(identifier, rdb)
+		if identifier == "packetsFromFile" {
+			protocol  = "packetsFromFile"
+		} else if identifier == "packet" {
+			protocol = "unsavedPacket"
+		}
+		messageChan <- models.PacketStruct{
+			Interface: "recover_packet_number",
+			Length:    packetsToRecover,
+			Protocol: protocol,
+		}
+	}()
 	var packets []models.PacketStruct
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
@@ -177,7 +192,6 @@ func RecoverPackets(identifier string) ([]models.PacketStruct, error) {
 	return packets, nil
 }
 
-
 func ClearPackets(identifier string) error {
 	cursor := uint64(0)
 	var batchSize int64 = 1000
@@ -217,4 +231,43 @@ func convertStringToBool(s string) bool {
 		fmt.Println("Error converting string to bool:", err)
 	}
 	return i
+}
+
+func CountHashesByPattern(pattern string, client *redis.Client) int {
+	keys, err := client.Keys(context.Background(), pattern + ":*").Result()
+	if err != nil {
+		panic(err)
+	}
+
+	// Create a channel to receive key types
+	keyTypesCh := make(chan string, len(keys))
+
+	// Wait group to wait for all goroutines to finish
+	var wg sync.WaitGroup
+	wg.Add(len(keys))
+
+	// Spawn goroutines to fetch key types
+	for _, key := range keys {
+		go func(k string) {
+			defer wg.Done()
+			keyType, err := client.Type(context.Background(), k).Result()
+			if err != nil {
+				panic(err)
+			}
+			keyTypesCh <- keyType
+		}(key)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(keyTypesCh)
+
+	// Count the number of hashes
+	hashCount := 0
+	for keyType := range keyTypesCh {
+		if keyType == "hash" {
+			hashCount++
+		}
+	}
+	return hashCount
 }

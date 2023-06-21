@@ -3,8 +3,8 @@ package main
 import (
 	"net/http"
 
-	"github.com/Radictionary/website/pkg/config"
-	"github.com/Radictionary/website/pkg/handlers"
+	"github.com/Radictionary/packy/pkg/config"
+	"github.com/Radictionary/packy/pkg/handlers"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 )
@@ -26,6 +26,7 @@ func routes(app *config.AppConfig) http.Handler {
 	mux.Get("/packetsearch", handlers.Repo.SearchPacket) //Search the backend for packet information
 	mux.Get("/settings", handlers.Repo.SettingsSync) //Tell the frontend the settings stored in database(filters, interface, etc)
 	mux.Get("/retrieve", handlers.Repo.Retrieve) //Recover the packets from DB
+	mux.Get("/timer", handlers.Repo.StartTimer)
 	mux.Post("/change", handlers.Repo.Change) // Frontend communicates to the backend on changing settings(filters, interface, etc)
 	mux.Post("/upload", handlers.Repo.Upload) //Upload a pcap file to the backend
 

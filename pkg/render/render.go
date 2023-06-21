@@ -3,8 +3,8 @@ package render
 import (
 	"bytes"
 	"fmt"
-	"github.com/Radictionary/website/pkg/config"
-	"github.com/Radictionary/website/pkg/template_models"
+	"github.com/Radictionary/packy/pkg/config"
+	"github.com/Radictionary/packy/pkg/template_models"
 	"html/template"
 	"log"
 	"net/http"

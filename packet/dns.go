@@ -26,8 +26,6 @@ func DnsInformation(domain string) (*dns.Msg, error) {
 
 func ProcessDnsPacket(packetData []byte) *layers.DNS {
 	packet := gopacket.NewPacket(packetData, layers.LayerTypeEthernet, gopacket.Default)
-
-	// Retrieve the DNS layer from the packet
 	dnsLayer := packet.Layer(layers.LayerTypeDNS)
 
 	dnsPacket, _ := dnsLayer.(*layers.DNS)
