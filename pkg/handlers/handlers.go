@@ -282,6 +282,7 @@ func (m *Repository) Retrieve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	get := r.URL.Query().Get("get")
 	if get == "recover" {
+		go redis.ClearPackets("packetsFromFile")
 		packets, err := redis.RecoverPackets("packet", MessageChan)
 		if err != nil {
 			fmt.Println("Error recovering packets from redis function")

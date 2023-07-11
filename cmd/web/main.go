@@ -11,7 +11,7 @@ import (
 	"github.com/Radictionary/packy/pkg/render"
 )
 
-var portNumber = ":8085"
+var portNumber = ":8080"
 var app config.AppConfig
 
 func main() {

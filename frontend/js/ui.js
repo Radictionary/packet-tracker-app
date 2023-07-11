@@ -45,10 +45,10 @@ document.addEventListener('keydown', function (event) {
         if (scrollDown == false) {
             scrollDown = true
             tableView.innerText = "(locked)"
-            // window.scrollBy({
-            //     top: packetTable.offsetHeight, // Scroll to the the end of the table's height
-            //     behavior: "auto"
-            // });
+            window.scrollBy({
+                top: packetTable.offsetHeight, // Scroll to the the end of the table's height
+                behavior: "auto"
+            });
         } else {
             scrollDown = false
             tableView.innerText = "(unlocked)"
@@ -61,6 +61,13 @@ document.addEventListener("keydown", function (event) {
             top: -packetTable.offsetHeight, // Scroll to the the top of the table's height
             behavior: "auto"
         });
+    }
+
+});
+document.addEventListener('keydown', function (event) {
+    if (event.ctrlKey && event.key === 'c') {
+        statusMessage.innerText = "Starting to stop..."
+        stopProgram()
     }
 });
 
@@ -283,7 +290,7 @@ function beutficalDisplay(packetData) {
 
         for (const layer in packetInfo) {
             html += `
-      <details open>
+      <details style="text-align: left; color: blue">
         <summary>${layer}</summary>
         <pre>${packetInfo[layer]}</pre>
       </details>

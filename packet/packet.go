@@ -17,7 +17,7 @@ import (
 	"github.com/google/gopacket/pcapgo"
 )
 
-// DetectProtocol detects the protocol and returns what it is
+// DetectProtocol detects the protocol, source and destination address and returns what it is.
 func DetectProtocol(packet gopacket.Packet) (string, string, string) {
 	var protocol, sourceAddress, destAddress string
 
@@ -36,12 +36,10 @@ func DetectProtocol(packet gopacket.Packet) (string, string, string) {
 				dnsLayer := packet.Layer(layers.LayerTypeDNS)
 				if dnsLayer != nil {
 					protocol = "DNS"
+				} else if udp.DstPort == 53 || udp.SrcPort == 53 {
+					protocol = "DNS"
 				} else {
-					if udp.DstPort == 53 || udp.SrcPort == 53 {
-						protocol = "DNS"
-					} else {
-						protocol = "UDP"
-					}
+					protocol = "UDP"
 				}
 			}
 		case layers.LayerTypeIPv6:
@@ -56,12 +54,10 @@ func DetectProtocol(packet gopacket.Packet) (string, string, string) {
 				dnsLayer := packet.Layer(layers.LayerTypeDNS)
 				if dnsLayer != nil {
 					protocol = "DNS"
+				} else if udp.DstPort == 53 || udp.SrcPort == 53 {
+					protocol = "DNS"
 				} else {
-					if udp.DstPort == 53 || udp.SrcPort == 53 {
-						protocol = "DNS"
-					} else {
-						protocol = "UDP"
-					}
+					protocol = "UDP"
 				}
 			}
 		}

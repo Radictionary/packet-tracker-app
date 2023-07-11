@@ -23,7 +23,7 @@
     <div class="saveMethod">
       <label for="save_method">Start saving packets</label>
       <input type="checkbox" name="save_method" id="save_method" onchange="showFileDialog(this.checked)" />
-      <br><label id="savingToFileNotification"></label>
+      <label id="savingToFileNotification"></label>
     </div>
     <div class="timer">
       <label for="timer">Timer</label>
@@ -82,8 +82,8 @@
       <h3 class="packetSavedContainer">Saved:<span id="packetSaved"></span></h3>
       <details>
         <summary id="details" style="visibility: hidden;">View Host DNS information</summary>
-        <div style="display: flex; justify-content: center; padding: 2rem;">
-          <div style="text-align: center; padding: 1rem">
+        <div style="display: flex; justify-content: center; padding: 1rem;">
+          <div style="text-align: center; padding: 0.5rem">
             <h4 id="packetDnsInformation"></h4>
           </div>
         </div>
@@ -92,7 +92,7 @@
       <br>
       <details>
         <summary>Packet Data</summary>
-        <div id="packet-container"></div>
+        <div id="packet-container" style="position: absolute; left: 1rem"></div>
       </details>
     </div>
   </div>

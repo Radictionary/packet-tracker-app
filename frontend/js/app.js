@@ -3,7 +3,7 @@ startSSE() //start inital connection with server
 //Table
 const tableBody = document.getElementById('table-body');
 const tableContainer = document.querySelector('.table-container');
-const maxRows = 3000;
+const maxRows = 4000;
 const minPacketRate = 10; // Minimum packet rate to process
 let packetRate = 50; // Start with a packet rate of 50 packets per second
 let lastTime = performance.now();
@@ -85,7 +85,7 @@ function appendingTable(data) {
         tableBody.appendChild(row);
         if (scrollDown) { tableContainer.scrollTop = tableContainer.scrollHeight; }
         if (tableBody.children.length > maxRows) {
-            statusMessage.innerText = "Throttling"
+            statusMessage.innerText = "Front-end table throttling."
             const excessRows = tableBody.children.length - maxRows;
             for (let i = 0; i < excessRows; i++) {
                 tableBody.removeChild(tableBody.firstChild);
